@@ -1,37 +1,78 @@
-import React from 'react';
+'use client';
 
-export default function SignUp() {
+import { useState } from 'react';
+
+type SignUpProps = {
+  onSwitchToLogin: () => void;
+};
+
+export default function SignUp({ onSwitchToLogin }: SignUpProps) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   return (
-    <section className='signup-panel' id='signup'>
-      <div className='signup-panel__card'>
-        <div className='signup-panel__header'>
-          <h2 className='signup-panel__title'>Sign Up</h2>
+    <section className="login-panel" id="signup">
+      <div className="login-panel__card">
+        <div className="login-panel__header">
+          <h2 className="login-panel__title">Sign Up</h2>
+          <p className="login-panel__subtitle">Create a student account</p>
         </div>
 
-        <form className='signup-panel__form'>
-          <div className='form-field'>
-            <label htmlFor='signup-name'>Full Name</label>
-            <input id='signup-name' name='name' type='text' placeholder='Enter your full name' />
+        <form className="login-panel__form">
+          <div className="form-field">
+            <label htmlFor="fullName">Full Name</label>
+            <input id="fullName" name="fullName" type="text" placeholder="Enter your full name" />
           </div>
 
-          <div className='form-field'>
-            <label htmlFor='signup-email'>Email</label>
-            <input id='signup-email' name='email' type='email' placeholder='Enter your email' />
+          <div className="form-field">
+            <label htmlFor="email">Email</label>
+            <input id="email" name="email" type="email" placeholder="Enter your email" />
           </div>
 
-          <div className='form-field'>
-            <label htmlFor='signup-password'>Password</label>
-            <input id='signup-password' name='password' type='password' placeholder='Create a password' />
+          <div className="form-field password-field">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Create a password"
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword((prev) => !prev)}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
           </div>
 
-          <div className='form-field'>
-            <label htmlFor='signup-confirm-password'>Confirm Password</label>
-            <input id='signup-confirm-password' name='confirmPassword' type='password' placeholder='Confirm your password' />
+          <div className="form-field password-field">
+            <label htmlFor="confirmPassword">Confirm Password</label>
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type={showConfirmPassword ? 'text' : 'password'}
+              placeholder="Confirm your password"
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+            >
+              {showConfirmPassword ? 'Hide' : 'Show'}
+            </button>
           </div>
 
-          <button type='submit' className='signup-panel__submit'>Create account</button>
+          <button type="submit" className="login-panel__submit">
+            Create account
+          </button>
 
-          <p className='signup-panel__footer'>Already have an account? <a href='#login'>Login</a></p>
+          <p className="login-panel__footer">
+            Already have an account?{' '}
+            <button type="button" className="login-panel__footer-action" onClick={onSwitchToLogin}>
+              Login
+            </button>
+          </p>
         </form>
       </div>
     </section>
