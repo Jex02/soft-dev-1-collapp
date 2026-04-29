@@ -176,6 +176,48 @@ export default function DashboardPage() {
         </h2>
       </div>
 
+      <div className="grid gap-6 mb-8 md:grid-cols-[1.4fr_0.9fr]">
+        <div className="rounded-3xl border border-gray-200 bg-slate-50 p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+            Student profile
+          </p>
+          <h3 className="mt-4 text-2xl font-bold text-slate-900">Welcome, None</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            This student dashboard is a UI placeholder for future interactive features, with student name and next feature design points.
+          </p>
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center justify-between rounded-2xl bg-white p-4 border border-gray-200">
+              <span className="text-sm font-medium text-slate-600">Student name</span>
+              <span className="text-sm font-semibold text-slate-900">None</span>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl bg-white p-4 border border-gray-200">
+              <span className="text-sm font-medium text-slate-600">Current feature</span>
+              <span className="text-sm font-semibold text-slate-900">College match preview</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-gray-200 bg-white p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+            Next feature
+          </p>
+          <h3 className="mt-4 text-xl font-semibold text-slate-900">Application roadmap</h3>
+          <p className="mt-3 text-sm text-slate-600">
+            Future interactions will guide students from school shortlist to submission tracking and personalized planning.
+          </p>
+          <div className="mt-6 grid gap-3">
+            <div className="rounded-2xl bg-slate-50 p-4 border border-gray-200">
+              <p className="text-sm font-semibold text-slate-900">Review deadlines</p>
+              <p className="text-xs text-slate-500 mt-1">Track your next tasks in one place.</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4 border border-gray-200">
+              <p className="text-sm font-semibold text-slate-900">Guidance tools</p>
+              <p className="text-xs text-slate-500 mt-1">Add planning helpers and reminders here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Cards */}
       <div className="space-y-4 mb-8">
         {stats.map((stat) => (
@@ -205,7 +247,7 @@ export default function DashboardPage() {
             <button
               key={app.id}
               onClick={() => handleApplicationClick(app.id)}
-              className="w-full bg-gray-100 hover:bg-gray-150 rounded-xl p-4 flex items-center justify-between transition-all duration-200 transform hover:scale-105 active:scale-95 text-left border border-gray-200 hover:border-gray-300"
+              className="w-full bg-gray-100 hover:bg-gray-200 rounded-xl p-4 flex items-center justify-between transition-all duration-200 transform hover:scale-105 active:scale-95 text-left border border-gray-200 hover:border-gray-300"
             >
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">

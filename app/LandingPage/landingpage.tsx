@@ -1,14 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [userType, setUserType] = useState<'student' | 'schoolRep'>('student');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const headingText = mode === 'login' ? 'Login' : 'Create an account';
+  const headingText = mode === 'login'
+    ? userType === 'schoolRep'
+      ? 'School Rep login'
+      : 'Student login'
+    : 'Create a student account';
   const submitText = mode === 'login' ? 'Login' : 'Sign Up';
   const footerText = mode === 'login' ? "Don't have an account?" : 'Already have an account?';
   const footerAction = mode === 'login' ? 'Sign up' : 'Login';
@@ -22,7 +28,10 @@ export default function LandingPage() {
           <p className='hero__subtext'>Build a polished application workflow for students and school representatives, from program search to submission review.</p>
           <div className='hero__actions'>
             <a href='#login' className='button button--primary' onClick={() => setMode('login')}>Login</a>
-            <a href='#login' className='button button--secondary' onClick={() => setMode('signup')}>Sign Up</a>
+            <a href='#login' className='button button--secondary' onClick={() => {
+              setMode('signup');
+              setUserType('student');
+            }}>Sign Up</a>
           </div>
         </div>
       </section>
@@ -31,25 +40,33 @@ export default function LandingPage() {
         <div className='login-panel__card'>
           <div className='login-panel__header'>
             <h2 className='login-panel__title'>{headingText}</h2>
-            <div className='login-panel__modes'>
-              <button
-                type='button'
-                className={`login-panel__mode ${userType === 'student' ? 'login-panel__mode--active' : ''}`}
-                onClick={() => setUserType('student')}
-              >
-                Student
-              </button>
-              <button
-                type='button'
-                className={`login-panel__mode ${userType === 'schoolRep' ? 'login-panel__mode--active' : ''}`}
-                onClick={() => setUserType('schoolRep')}
-              >
-                School Rep
-              </button>
-            </div>
+            {mode === 'login' ? (
+              <div className='login-panel__modes'>
+                <button
+                  type='button'
+                  className={`login-panel__mode ${userType === 'student' ? 'login-panel__mode--active' : ''}`}
+                  onClick={() => setUserType('student')}
+                >
+                  Student
+                </button>
+                <button
+                  type='button'
+                  className={`login-panel__mode ${userType === 'schoolRep' ? 'login-panel__mode--active' : ''}`}
+                  onClick={() => setUserType('schoolRep')}
+                >
+                  School Rep
+                </button>
+              </div>
+            ) : (
+              <p className='login-panel__subtitle'>Student sign up only</p>
+            )}
           </div>
 
-          <form className='login-panel__form'>
+          <form className='login-panel__form' onSubmit={(event) => {
+              event.preventDefault();
+              const targetRoute = mode === 'login' && userType === 'schoolRep' ? '/schoolrep' : '/dashboard';
+              router.push(targetRoute);
+            }}>
             {mode === 'signup' && (
               <>
                 <div className='form-field'>
@@ -111,7 +128,17 @@ export default function LandingPage() {
 
             <p className='login-panel__footer'>
               {footerText}{' '}
-              <button type='button' className='login-panel__footer-action' onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
+              <button
+                type='button'
+                className='login-panel__footer-action'
+                onClick={() => {
+                  const nextMode = mode === 'login' ? 'signup' : 'login';
+                  setMode(nextMode);
+                  if (nextMode === 'signup') {
+                    setUserType('student');
+                  }
+                }}
+              >
                 {footerAction}
               </button>
             </p>
