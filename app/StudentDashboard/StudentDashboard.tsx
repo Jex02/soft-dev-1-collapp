@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { FileText, CheckCircle, Clock, MapPin, Bell, LogOut, Settings, User, Menu } from 'lucide-react';
+import './StudentDashboard.css';
 
 interface ApplicationStats {
   id: number;
@@ -19,7 +20,7 @@ interface Application {
   status: 'Accepted' | 'Under Review' | 'Pending';
 }
 
-export default function DashboardPage() {
+export default function StudentDashboard() {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [applications, setApplications] = useState<Application[]>([
     {
@@ -50,7 +51,7 @@ export default function DashboardPage() {
       title: 'ACCEPTED',
       count: 1,
       icon: <CheckCircle size={40} className="text-white" strokeWidth={1.5} />,
-      bgColor: 'bg-gradient-to-r from-emerald-400 to-green-500',
+      bgColor: 'bg-linear-to-r from-emerald-400 to-green-500',
       textColor: 'text-white',
     },
     {
@@ -74,7 +75,7 @@ export default function DashboardPage() {
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'Accepted':
-        return 'bg-gradient-to-r from-emerald-400 to-green-500 text-white';
+        return 'bg-linear-to-r from-emerald-400 to-green-500 text-white';
       case 'Under Review':
         return 'bg-yellow-300 text-gray-900';
       case 'Pending':
@@ -96,8 +97,7 @@ export default function DashboardPage() {
           {/* Left - COLLAPP Logo */}
           <div className="flex items-center gap-3">
             <div
-              className="w-10 h-10 border-2 border-black bg-white flex items-center justify-start pl-2"
-              style={{ clipPath: 'polygon(15% 0%, 85% 0%, 100% 15%, 100% 85%, 85% 100%, 15% 100%, 0% 85%, 0% 15%)' }}
+              className="w-10 h-10 border-2 border-black bg-white flex items-center justify-start pl-2 clip-path-polygon"
             >
               <div className="w-1.5 h-full bg-black rounded-full"></div>
             </div>
@@ -118,7 +118,7 @@ export default function DashboardPage() {
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded-full transition-all duration-200"
               >
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-8 h-8 bg-linear-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
                   JD
                 </div>
               </button>
@@ -268,7 +268,7 @@ export default function DashboardPage() {
 
         <button
           onClick={() => alert('View all applications')}
-          className="w-full mt-6 bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-500 hover:to-green-600 text-white font-semibold py-3 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95"
+          className="w-full mt-6 bg-linear-to-r from-emerald-400 to-green-500 hover:from-emerald-500 hover:to-green-600 text-white font-semibold py-3 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95"
         >
           View All Applications
         </button>
