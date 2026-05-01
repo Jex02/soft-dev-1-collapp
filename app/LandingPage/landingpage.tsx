@@ -1,93 +1,24 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import './landingpage.css';
 import StudentLogin from './Register/StudentLogin';
 import SchoolRepLogin from './Register/SchoolRepLogin';
-import { Account, loadAccounts, saveAccounts } from './Register/accounts';
+import SignUp from './Register/SignUp';
 
 export default function LandingPage() {
-  const router = useRouter();
   const [panelType, setPanelType] = useState<'studentLogin' | 'schoolRepLogin' | 'signup' | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const showPanel = Boolean(panelType);
 
   useEffect(() => {
     if (panelType) {
       panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [showPanel]);
+  }, [panelType]);
 
   const openPanel = (type: 'studentLogin' | 'schoolRepLogin' | 'signup') => {
     setPanelType(type);
-    setError('');
-    setFullName('');
-    setEmail('');
-    setUsername('');
-    setPassword('');
-    setConfirmPassword('');
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-  };
-
-  const handleSignUp = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const accounts = loadAccounts();
-    const normalizedUsername = username.trim().toLowerCase();
-
-    if (!fullName.trim() || !email.trim() || !normalizedUsername || !password.trim()) {
-      setError('Please fill in all required fields.');
-      return;
-    }
-
-    if (password.length < 5) {
-      setError('Password must be at least 5 characters long.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    if (accounts[normalizedUsername]) {
-      setError('That username is already taken.');
-      return;
-    }
-
-    const newAccount: Account = {
-      password,
-      route: '/StudentDashboard',
-      type: 'student',
-      fullName: fullName.trim(),
-      email: email.trim(),
-    };
-
-    const updatedAccounts = {
-      ...accounts,
-      [normalizedUsername]: newAccount,
-    };
-
-    saveAccounts(updatedAccounts);
-    setError('');
-    setPanelType(null);
-    setFullName('');
-    setEmail('');
-    setUsername('');
-    setPassword('');
-    setConfirmPassword('');
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-    router.push(newAccount.route);
   };
 
   return (
@@ -130,126 +61,15 @@ export default function LandingPage() {
       </section>
 
       {showPanel && (
-        <section className="login-panel" ref={panelRef}>
-          <div className="login-panel__card">
-            <div className="login-panel__header">
-              <h2 className="login-panel__title">{mode === 'login' ? 'Login' : 'Sign Up'}</h2>
-              {mode === 'login' ? (
-                <div className="login-panel__modes">
-                  <button
-                    type="button"
-                    className={`login-panel__mode ${
-                      userType === 'student' ? 'login-panel__mode--active' : ''
-                    }`}
-                    onClick={() => setUserType('student')}
-                  >
-                    Student
-                  </button>
-                  <button
-                    type="button"
-                    className={`login-panel__mode ${
-                      userType === 'schoolRep' ? 'login-panel__mode--active' : ''
-                    }`}
-                    onClick={() => setUserType('schoolRep')}
-                  >
-                    School Rep
-                  </button>
-                </div>
-              ) : (
-                <p className="login-panel__subtitle">Create a student account</p>
-              )}
-            </div>
-
-            <form className="login-panel__form" onSubmit={handleSubmit}>
-              {mode === 'signup' && (
-                <>
-                  <div className="form-field">
-                    <label htmlFor="fullName">Full Name</label>
-                    <input id="fullName" name="fullName" type="text" placeholder="Enter your full name" />
-                  </div>
-
-                  <div className="form-field">
-                    <label htmlFor="email">Email</label>
-                    <input id="email" name="email" type="email" placeholder="Enter your email" />
-                  </div>
-                </>
-              )}
-
-              <div className="form-field">
-                <label htmlFor="username">Username</label>
-                <input
-                  id="username"
-                  name="username"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    setError('');
-                  }}
-                  type="text"
-                  placeholder="Enter your username"
-                />
-              </div>
-
-              <div className="form-field password-field">
-                <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  name="password"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setError('');
-                  }}
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder={mode === 'login' ? 'Enter your password' : 'Create a password'}
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-
-              {mode === 'signup' && (
-                <div className="form-field password-field">
-                  <label htmlFor="confirmPassword">Confirm Password</label>
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="Confirm your password"
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowConfirmPassword((prev) => !prev)}
-                  >
-                    {showConfirmPassword ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              )}
-
-              {error && <div className="alert">{error}</div>}
-
-              <button type="submit" className="login-panel__submit">
-                {mode === 'login' ? 'Login' : 'Create account'}
-              </button>
-
-              <p className="login-panel__footer">
-                {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
-                <button
-                  type="button"
-                  className="login-panel__footer-action"
-                  onClick={() => openPanel(mode === 'login' ? 'signup' : 'login')}
-                >
-                  {mode === 'login' ? 'Sign up' : 'Login'}
-                </button>
-              </p>
-            </form>
-          </div>
-        </section>
+        <div ref={panelRef}>
+          {panelType === 'studentLogin' ? (
+            <StudentLogin onSwitchToSignUp={() => openPanel('signup')} />
+          ) : panelType === 'schoolRepLogin' ? (
+            <SchoolRepLogin onSwitchToSignUp={() => openPanel('signup')} />
+          ) : (
+            <SignUp onSwitchToLogin={() => openPanel('studentLogin')} />
+          )}
+        </div>
       )}
 
       <section className="feature-section">
@@ -275,7 +95,7 @@ export default function LandingPage() {
             <button type="button" className="button button--dark" onClick={() => openPanel('signup')}>
               Get Started
             </button>
-            <button type="button" className="button button--secondary" onClick={() => openPanel('login')}>
+            <button type="button" className="button button--secondary" onClick={() => openPanel('studentLogin')}>
               Learn More
             </button>
           </div>
