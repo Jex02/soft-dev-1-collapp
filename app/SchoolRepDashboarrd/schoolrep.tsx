@@ -1,40 +1,82 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Bell, LogOut, Settings, User } from 'lucide-react';
+import './schoolrep.css';
 
 interface Applicant {
   id: number;
+  studentId: number;
+  studentName: string;
+  collegeId: number;
+  collegeName: string;
+  program: string;
+  status: 'Pending' | 'Under Review' | 'Accepted' | 'Rejected';
+  appliedDate: string;
+  updatedAt: string;
+  documents?: string[];
+  notes?: string;
   initials: string;
+}
+
+
+interface College {
+  id: number;
+  name: string;
+  program?: string;
+  description?: string;
+  location: string;
+  status: 'Available' | 'Unavailable';
+  applicationDeadline: string;
+  requirements: string | string[];
+  contactEmail: string;
+}
+
+interface CollegeFormState {
+  id: number;
   name: string;
   program: string;
-  status: 'Pending' | 'Approved';
+  location: string;
+  status: 'Available' | 'Unavailable';
+  applicationDeadline: string;
+  requirements: string;
+  contactEmail: string;
 }
 
 export default function SchoolRepPage() {
   const router = useRouter();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const [applicants, setApplicants] = useState<Applicant[]>([
-    { id: 1, initials: 'JD', name: 'John Doe', program: 'Computer Science', status: 'Pending' },
-    { id: 2, initials: 'JS', name: 'Jane Smith', program: 'Business Administration', status: 'Pending' },
-    { id: 3, initials: 'AS', name: 'Alice Smith', program: 'Arts', status: 'Approved' },
-  ]);
+  const [applicants, setApplicants] = useState<Applicant[]>([]);
+  const [colleges, setColleges] = useState<College[]>([]);
   const [declinedApplicants, setDeclinedApplicants] = useState<Applicant[]>([]);
   const [showApproved, setShowApproved] = useState(false);
   const [showDeclined, setShowDeclined] = useState(false);
   const [approvedSearch, setApprovedSearch] = useState('');
   const [declinedSearch, setDeclinedSearch] = useState('');
   const [selectedApplicantId, setSelectedApplicantId] = useState<number | null>(null);
+  const [selectedCollegeId, setSelectedCollegeId] = useState<number | null>(null);
+  const [collegeForm, setCollegeForm] = useState<CollegeFormState>({
+    id: 0,
+    name: '',
+    program: '',
+    location: '',
+    status: 'Available',
+    applicationDeadline: '',
+    requirements: '',
+    contactEmail: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const pendingCount = applicants.filter((applicant) => applicant.status === 'Pending').length;
-  const pendingApplicants = applicants.filter((applicant) => applicant.status === 'Pending');
-  const approvedApplicants = applicants.filter((applicant) => applicant.status === 'Approved');
+  const pendingCount = applicants.filter((applicant) => applicant.status === 'Pending' || applicant.status === 'Under Review').length;
+  const pendingApplicants = applicants.filter((applicant) => applicant.status === 'Pending' || applicant.status === 'Under Review');
+  const approvedApplicants = applicants.filter((applicant) => applicant.status === 'Accepted');
   const filteredApprovedApplicants = approvedApplicants.filter((applicant) => {
     const search = approvedSearch.trim().toLowerCase();
     if (!search) return true;
     return (
-      applicant.name.toLowerCase().includes(search) ||
+      applicant.studentName.toLowerCase().includes(search) ||
       applicant.program.toLowerCase().includes(search)
     );
   });
@@ -42,46 +84,289 @@ export default function SchoolRepPage() {
     const search = declinedSearch.trim().toLowerCase();
     if (!search) return true;
     return (
-      applicant.name.toLowerCase().includes(search) ||
+      applicant.studentName.toLowerCase().includes(search) ||
       applicant.program.toLowerCase().includes(search)
     );
   });
   const selectedApplicant =
     applicants.find((applicant) => applicant.id === selectedApplicantId) ?? null;
 
-  const updateStatus = (id: number, status: 'Approved' | 'Pending') => {
-    setApplicants((prev) =>
-      prev.map((applicant) => (applicant.id === id ? { ...applicant, status } : applicant))
-    );
+  const updateStatus = async (id: number, status: 'Accepted' | 'Pending' | 'Rejected') => {
+    try {
+      const response = await fetch(`/server/applications?id=${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update application status');
+      }
+
+      const updatedApplication: Applicant = await response.json();
+      const mappedApplication = {
+        ...updatedApplication,
+        initials: updatedApplication.studentName.split(' ').map(n => n[0]).join('').toUpperCase(),
+      };
+
+      setApplicants((prev) =>
+        prev.map((applicant) => (applicant.id === id ? mappedApplication : applicant))
+      );
+
+      // Update declinedApplicants if status changed to/from Rejected
+      if (status === 'Rejected') {
+        setDeclinedApplicants((prev) => [...prev, mappedApplication]);
+      } else {
+        setDeclinedApplicants((prev) => prev.filter((app) => app.id !== id));
+      }
+    } catch (err) {
+      console.error('Error updating application status:', err);
+      alert(err instanceof Error ? err.message : 'Could not update status');
+    }
   };
 
-  const declineApplicant = (id: number) => {
-    const applicant = applicants.find((item) => item.id === id);
-    if (!applicant) return;
+  useEffect(() => {
+    const fetchColleges = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-    setApplicants((prev) => prev.filter((item) => item.id !== id));
-    setDeclinedApplicants((prev) =>
-      prev.some((item) => item.id === id) ? prev : [...prev, { ...applicant, status: 'Pending' }]
-    );
+        const response = await fetch('/server/colleges');
+        if (!response.ok) {
+          throw new Error('Failed to load colleges');
+        }
+
+        const data: College[] = await response.json();
+        setColleges(data);
+      } catch (err) {
+        console.error('Error loading colleges:', err);
+        setError(err instanceof Error ? err.message : 'Unable to load colleges');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchColleges();
+  }, []);
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        const response = await fetch('/server/applications');
+        if (!response.ok) {
+          throw new Error('Failed to load applications');
+        }
+
+        const data: Applicant[] = await response.json();
+        const mappedData = data.map(app => ({
+          ...app,
+          initials: app.studentName.split(' ').map(n => n[0]).join('').toUpperCase(),
+        }));
+        setApplicants(mappedData);
+        setDeclinedApplicants(mappedData.filter(app => app.status === 'Rejected'));
+      } catch (err) {
+        console.error('Error loading applications:', err);
+      }
+    };
+
+    fetchApplications();
+  }, []);
+
+  const toggleCollegeAvailability = async (id: number) => {
+    const college = colleges.find((item) => item.id === id);
+    if (!college) return;
+
+    const updatedCollege: College = {
+      ...college,
+      status: college.status === 'Available' ? 'Unavailable' : 'Available',
+    };
+
+    try {
+      const response = await fetch(`/server/colleges?id=${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedCollege),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update college availability');
+      }
+
+      const savedCollege: College = await response.json();
+      setColleges((prev) => prev.map((item) => (item.id === id ? savedCollege : item)));
+    } catch (err) {
+      console.error('Error updating college availability:', err);
+      alert(err instanceof Error ? err.message : 'Could not update availability');
+    }
+  };
+
+  const handleCollegeFormChange = (field: keyof CollegeFormState, value: string) => {
+    setCollegeForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const resetCollegeForm = () => {
+    setCollegeForm({
+      id: 0,
+      name: '',
+      program: '',
+      location: '',
+      status: 'Available',
+      applicationDeadline: '',
+      requirements: '',
+      contactEmail: '',
+    });
+    setSelectedCollegeId(null);
+  };
+
+  const saveCollege = async () => {
+    if (!collegeForm.name || !collegeForm.program || !collegeForm.location) {
+      alert('Name, program, and location are required.');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: collegeForm.name,
+        program: collegeForm.program,
+        location: collegeForm.location,
+        status: collegeForm.status,
+        applicationDeadline: collegeForm.applicationDeadline,
+        requirements: collegeForm.requirements,
+        contactEmail: collegeForm.contactEmail,
+      };
+
+      if (collegeForm.id === 0) {
+        const response = await fetch('/server/colleges', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to create college');
+        }
+
+        const createdCollege: College = await response.json();
+        setColleges((prev) => [...prev, createdCollege]);
+      } else {
+        const response = await fetch(`/server/colleges?id=${collegeForm.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save college changes');
+        }
+
+        const updatedCollege: College = await response.json();
+        setColleges((prev) => prev.map((item) => (item.id === updatedCollege.id ? updatedCollege : item)));
+      }
+
+      resetCollegeForm();
+    } catch (err) {
+      console.error('Error saving college:', err);
+      alert(err instanceof Error ? err.message : 'Could not save college');
+    }
+  };
+
+  const editCollege = (college: College) => {
+    setSelectedCollegeId(college.id);
+
+    const requirements = Array.isArray(college.requirements)
+      ? college.requirements.join(', ')
+      : college.requirements || '';
+
+    setCollegeForm({
+      id: college.id,
+      name: college.name,
+      program: college.program || college.description || '',
+      location: college.location,
+      status: college.status,
+      applicationDeadline: college.applicationDeadline,
+      requirements,
+      contactEmail: college.contactEmail,
+    });
+  };
+
+  const declineApplicant = async (id: number) => {
+    await updateStatus(id, 'Rejected');
     setSelectedApplicantId(null);
   };
 
-  const restoreApplicant = (id: number) => {
-    const applicant = declinedApplicants.find((item) => item.id === id);
-    if (!applicant) return;
-
-    setDeclinedApplicants((prev) => prev.filter((item) => item.id !== id));
-    setApplicants((prev) =>
-      prev.some((item) => item.id === id) ? prev : [...prev, { ...applicant, status: 'Pending' }]
-    );
+  const restoreApplicant = async (id: number) => {
+    await updateStatus(id, 'Pending');
   };
+
+  const collegeListContent = loading ? (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center text-slate-600">
+      Loading colleges...
+    </div>
+  ) : error ? (
+    <div className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-700">
+      {error}
+    </div>
+  ) : colleges.length === 0 ? (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center text-slate-600">
+      No colleges found. Add one using the form.
+    </div>
+  ) : (
+    colleges.map((college) => (
+      <div key={college.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{college.name}</p>
+            <p className="text-xs text-slate-500">{college.program || college.description}</p>
+            <p className="text-sm text-slate-600 mt-2">{college.location}</p>
+          </div>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              college.status === 'Available'
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-slate-200 text-slate-700'
+            }`}
+          >
+            {college.status}
+          </span>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Deadline</p>
+            <p className="text-sm text-slate-700">{college.applicationDeadline || 'TBD'}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => toggleCollegeAvailability(college.id)}
+              className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-900 transition"
+            >
+              {college.status === 'Available' ? 'Mark Unavailable' : 'Mark Available'}
+            </button>
+            <button
+              onClick={() => editCollege(college)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+      </div>
+    ))
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="border-b border-slate-200 bg-white sticky top-0 z-50">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between px-6 py-5 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white">
+            <div className="w-11 h-11 rounded-2xl bg-linear-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white">
               <Building2 size={24} />
             </div>
             <div>
@@ -148,7 +433,7 @@ export default function SchoolRepPage() {
       </div>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <section className="rounded-[2rem] bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-8 text-white shadow-xl">
+        <section className="rounded-4xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-700 p-8 text-white shadow-xl">
           <div className="flex items-start justify-between gap-6">
             <div>
               <p className="text-sm uppercase tracking-[0.3em] text-slate-300">Welcome back</p>
@@ -192,8 +477,8 @@ export default function SchoolRepPage() {
                     {applicant.initials}
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">{applicant.name}</p>
-                    <p className="text-sm text-slate-600">Applied for {applicant.program}</p>
+                    <p className="font-semibold text-slate-900">{applicant.studentName}</p>
+                    <p className="text-sm text-slate-600">Applied to {applicant.collegeName} for {applicant.program}</p>
                   </div>
                 </div>
 
@@ -204,7 +489,7 @@ export default function SchoolRepPage() {
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
-                      updateStatus(applicant.id, 'Approved');
+                      updateStatus(applicant.id, 'Accepted');
                     }}
                     className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-600 transition"
                   >
@@ -254,8 +539,8 @@ export default function SchoolRepPage() {
                       className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-center justify-between gap-3 cursor-pointer hover:shadow-sm transition"
                     >
                       <div>
-                        <p className="font-semibold text-slate-900">{applicant.name}</p>
-                        <p className="text-sm text-slate-600">Applied for {applicant.program}</p>
+                        <p className="font-semibold text-slate-900">{applicant.studentName}</p>
+                        <p className="text-sm text-slate-600">Applied to {applicant.collegeName} for {applicant.program}</p>
                       </div>
                       <span className="rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700">
                         {applicant.status}
@@ -296,8 +581,8 @@ export default function SchoolRepPage() {
                       className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-3"
                     >
                       <div>
-                        <p className="font-semibold text-slate-900">{applicant.name}</p>
-                        <p className="text-sm text-slate-600">Applied for {applicant.program}</p>
+                        <p className="font-semibold text-slate-900">{applicant.studentName}</p>
+                        <p className="text-sm text-slate-600">Applied to {applicant.collegeName} for {applicant.program}</p>
                       </div>
                       <button
                         onClick={() => restoreApplicant(applicant.id)}
@@ -310,6 +595,117 @@ export default function SchoolRepPage() {
                 )}
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                College program management
+              </p>
+              <h3 className="text-2xl font-semibold text-slate-900 mt-2">Available colleges & programs</h3>
+            </div>
+            <button
+              onClick={() => resetCollegeForm()}
+              className="rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+            >
+              Add New Program
+            </button>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-4">
+              {collegeListContent}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
+                {collegeForm.id === 0 ? 'Create new college/program' : 'Edit college/program'}
+              </p>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">College name</label>
+                  <input
+                    type="text"
+                    value={collegeForm.name}
+                    onChange={(event) => handleCollegeFormChange('name', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Program</label>
+                  <input
+                    type="text"
+                    value={collegeForm.program}
+                    onChange={(event) => handleCollegeFormChange('program', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Location</label>
+                  <input
+                    type="text"
+                    value={collegeForm.location}
+                    onChange={(event) => handleCollegeFormChange('location', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Deadline</label>
+                  <input
+                    type="date"
+                    value={collegeForm.applicationDeadline}
+                    onChange={(event) => handleCollegeFormChange('applicationDeadline', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Requirements</label>
+                  <textarea
+                    rows={3}
+                    value={collegeForm.requirements}
+                    onChange={(event) => handleCollegeFormChange('requirements', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    placeholder="Comma-separated list"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Contact email</label>
+                  <input
+                    type="email"
+                    value={collegeForm.contactEmail}
+                    onChange={(event) => handleCollegeFormChange('contactEmail', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Status</label>
+                  <select
+                    value={collegeForm.status}
+                    onChange={(event) => handleCollegeFormChange('status', event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  >
+                    <option value="Available">Available</option>
+                    <option value="Unavailable">Unavailable</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={saveCollege}
+                    className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition"
+                  >
+                    {collegeForm.id === 0 ? 'Create College' : 'Save Changes'}
+                  </button>
+                  <button
+                    onClick={resetCollegeForm}
+                    className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -332,7 +728,7 @@ export default function SchoolRepPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                     Applicant details
                   </p>
-                  <h3 className="mt-1 text-xl font-semibold text-slate-900">{selectedApplicant.name}</h3>
+                  <h3 className="mt-1 text-xl font-semibold text-slate-900">{selectedApplicant.studentName}</h3>
                 </div>
               </div>
               <button
@@ -344,6 +740,11 @@ export default function SchoolRepPage() {
             </div>
 
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">Applied to</p>
+              <p className="mt-1 font-semibold text-slate-900">{selectedApplicant.collegeName}</p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm text-slate-600">Applied program</p>
               <p className="mt-1 font-semibold text-slate-900">{selectedApplicant.program}</p>
             </div>
@@ -351,8 +752,10 @@ export default function SchoolRepPage() {
             <div className="mt-4 flex items-center gap-2">
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  selectedApplicant.status === 'Approved'
+                  selectedApplicant.status === 'Accepted'
                     ? 'bg-emerald-100 text-emerald-700'
+                    : selectedApplicant.status === 'Rejected'
+                    ? 'bg-rose-100 text-rose-700'
                     : 'bg-yellow-100 text-yellow-800'
                 }`}
               >
@@ -367,7 +770,7 @@ export default function SchoolRepPage() {
               >
                 Close
               </button>
-              {selectedApplicant.status !== 'Approved' && (
+              {selectedApplicant.status !== 'Accepted' && selectedApplicant.status !== 'Rejected' && (
                 <button
                   onClick={() => declineApplicant(selectedApplicant.id)}
                   className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
@@ -375,9 +778,9 @@ export default function SchoolRepPage() {
                   Decline
                 </button>
               )}
-              {selectedApplicant.status !== 'Approved' && (
+              {selectedApplicant.status !== 'Accepted' && (
                 <button
-                  onClick={() => updateStatus(selectedApplicant.id, 'Approved')}
+                  onClick={() => updateStatus(selectedApplicant.id, 'Accepted')}
                   className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
                 >
                   Accept

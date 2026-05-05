@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, CheckCircle, Clock, MapPin, Bell, LogOut, Settings, User, Menu } from 'lucide-react';
+import { FileText, CheckCircle, Clock, MapPin, Bell, LogOut, Settings, User, RefreshCw } from 'lucide-react';
 import './StudentDashboard.css';
 
 interface ApplicationStats {
@@ -16,35 +16,98 @@ interface ApplicationStats {
 
 interface Application {
   id: number;
-  universityName: string;
+  studentId: number;
+  studentName: string;
+  collegeId: number;
+  collegeName: string;
   program: string;
-  status: 'Accepted' | 'Under Review' | 'Pending';
+  status: 'Accepted' | 'Under Review' | 'Pending' | 'Rejected';
+  appliedDate: string;
+  updatedAt: string;
+  documents?: string[];
+  notes?: string;
+}
+
+interface College {
+  id: number;
+  name: string;
+  location: string;
+  description: string;
+  status: 'Available' | 'Unavailable';
+  applicationDeadline?: string;
+  requirements?: string[];
+  contactEmail?: string;
 }
 
 export default function StudentDashboard() {
   const router = useRouter();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [selectedStat, setSelectedStat] = useState<ApplicationStats | null>(null);
-  const [applications, setApplications] = useState<Application[]>([
-    {
-      id: 1,
-      universityName: 'Ateneo de Manila University',
-      program: 'Business Administration',
-      status: 'Under Review',
-    },
-    {
-      id: 2,
-      universityName: 'De La Salle University',
-      program: 'Industrial Engineering',
-      status: 'Accepted',
-    },
-  ]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [stats] = useState<ApplicationStats[]>([
+  const studentName = 'Juan dela Cruz';
+  const studentId = 1; // In a real app, this would come from authentication
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch student's applications
+      const applicationsResponse = await fetch(`/server/applications?studentId=${studentId}`);
+      if (!applicationsResponse.ok) {
+        throw new Error('Failed to fetch applications');
+      }
+      const applicationsData = await applicationsResponse.json();
+      setApplications(applicationsData);
+
+      // Fetch available colleges
+      const collegesResponse = await fetch('/server/colleges?status=Available');
+      if (!collegesResponse.ok) {
+        throw new Error('Failed to fetch colleges');
+      }
+      const collegesData = await collegesResponse.json();
+      setColleges(collegesData);
+
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch applications and colleges on component mount
+  useEffect(() => {
+    fetchData();
+  }, [studentId]);
+
+  // Optional: Poll for updates every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [studentId]);
+
+  const totalApplications = applications.length;
+  const acceptedApplications = applications.filter(
+    (app) => app.status === 'Accepted'
+  ).length;
+  const underReviewApplications = applications.filter(
+    (app) => app.status === 'Under Review'
+  ).length;
+  const availableColleges = colleges.length;
+
+  const stats: ApplicationStats[] = [
     {
       id: 1,
       title: 'TOTAL APPLICATIONS',
-      count: 2,
+      count: totalApplications,
       icon: <FileText size={40} className="text-gray-700" strokeWidth={1.5} />,
       bgColor: 'bg-gray-300',
       textColor: 'text-gray-900',
@@ -52,7 +115,7 @@ export default function StudentDashboard() {
     {
       id: 2,
       title: 'ACCEPTED',
-      count: 1,
+      count: acceptedApplications,
       icon: <CheckCircle size={40} className="text-white" strokeWidth={1.5} />,
       bgColor: 'bg-linear-to-r from-emerald-400 to-green-500',
       textColor: 'text-white',
@@ -60,7 +123,7 @@ export default function StudentDashboard() {
     {
       id: 3,
       title: 'UNDER REVIEW',
-      count: 1,
+      count: underReviewApplications,
       icon: <Clock size={40} className="text-gray-900" strokeWidth={1.5} />,
       bgColor: 'bg-yellow-300',
       textColor: 'text-gray-900',
@@ -68,12 +131,12 @@ export default function StudentDashboard() {
     {
       id: 4,
       title: 'AVAILABLE COLLEGES',
-      count: 3,
+      count: availableColleges,
       icon: <MapPin size={40} className="text-gray-700" strokeWidth={1.5} />,
       bgColor: 'bg-gray-300',
       textColor: 'text-gray-900',
     },
-  ]);
+  ];
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
@@ -83,6 +146,8 @@ export default function StudentDashboard() {
         return 'bg-yellow-300 text-gray-900';
       case 'Pending':
         return 'bg-gray-300 text-gray-900';
+      case 'Rejected':
+        return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-200 text-gray-900';
     }
@@ -125,6 +190,33 @@ export default function StudentDashboard() {
     return null;
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Error loading dashboard: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header/Navbar */}
@@ -142,6 +234,15 @@ export default function StudentDashboard() {
 
           {/* Right - Notification and Profile */}
           <div className="flex items-center gap-4">
+            {/* Refresh Button */}
+            <button
+              onClick={fetchData}
+              className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200"
+              title="Refresh data"
+            >
+              <RefreshCw size={20} className="text-gray-600" />
+            </button>
+
             {/* Notification Bell */}
             <button className="relative p-2 hover:bg-gray-100 rounded-full transition-all duration-200">
               <Bell size={24} className="text-gray-600" />
@@ -217,18 +318,24 @@ export default function StudentDashboard() {
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
             Student profile
           </p>
-          <h3 className="mt-4 text-2xl font-bold text-slate-900">Welcome, None</h3>
+          <h3 className="mt-4 text-2xl font-bold text-slate-900">Welcome, {studentName}</h3>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            This student dashboard is a UI placeholder for future interactive features, with student name and next feature design points.
+            This student dashboard shows your active application summary in real time.
           </p>
           <div className="mt-6 space-y-3">
             <div className="flex items-center justify-between rounded-2xl bg-white p-4 border border-gray-200">
               <span className="text-sm font-medium text-slate-600">Student name</span>
-              <span className="text-sm font-semibold text-slate-900">None</span>
+              <span className="text-sm font-semibold text-slate-900">{studentName}</span>
             </div>
-            <div className="flex items-center justify-between rounded-2xl bg-white p-4 border border-gray-200">
-              <span className="text-sm font-medium text-slate-600">Current feature</span>
-              <span className="text-sm font-semibold text-slate-900">College match preview</span>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl bg-white p-4 border border-gray-200">
+                <p className="text-sm font-medium text-slate-600">Total applications</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{totalApplications}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-4 border border-gray-200">
+                <p className="text-sm font-medium text-slate-600">Accepted</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{acceptedApplications}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -267,6 +374,12 @@ export default function StudentDashboard() {
                 {stat.title}
               </p>
               <p className="text-5xl font-bold mt-2">{stat.count}</p>
+              {stat.title === 'AVAILABLE COLLEGES' && colleges.length > 0 && (
+                <p className="mt-2 text-sm text-slate-700">
+                  {colleges.slice(0, 3).map((college) => college.name).join(', ')}
+                  {colleges.length > 3 ? `, +${colleges.length - 3} more` : ''}
+                </p>
+              )}
             </div>
             <div className="text-right">{stat.icon}</div>
           </div>
@@ -288,9 +401,12 @@ export default function StudentDashboard() {
             >
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">
-                  {app.universityName}
+                  {app.collegeName}
                 </p>
                 <p className="text-sm text-gray-600 mt-1">{app.program}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Applied: {new Date(app.appliedDate).toLocaleDateString()}
+                </p>
               </div>
               <span
                 className={`${getStatusBadgeColor(
@@ -412,7 +528,7 @@ export default function StudentDashboard() {
                 </span>
                 {highlightedApplication && (
                   <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <p className="text-sm font-semibold text-gray-900">{highlightedApplication.universityName}</p>
+                    <p className="text-sm font-semibold text-gray-900">{highlightedApplication.collegeName}</p>
                     <p className="mt-1 text-xs text-gray-600">{highlightedApplication.program}</p>
                   </div>
                 )}
@@ -426,9 +542,29 @@ export default function StudentDashboard() {
             </div>
 
             <p className="mt-4 text-sm text-gray-600">
-              You currently have <span className="font-semibold text-gray-900">{selectedStat.count}</span>{' '}
-              item(s) in this category. Data details will be connected once Supabase is ready.
+              {selectedStat.title === 'AVAILABLE COLLEGES' ? (
+                <>There are <span className="font-semibold text-gray-900">{selectedStat.count}</span> colleges currently open for application.</>
+              ) : (
+                <>You currently have <span className="font-semibold text-gray-900">{selectedStat.count}</span>{' '}item(s) in this category.</>
+              )}
             </p>
+
+            {selectedStat.title === 'AVAILABLE COLLEGES' && colleges.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Open colleges</p>
+                <ul className="mt-3 space-y-3 text-sm text-slate-700">
+                  {colleges.slice(0, 4).map((college) => (
+                    <li key={college.id} className="rounded-2xl bg-white p-3 border border-slate-200">
+                      <p className="font-semibold text-slate-900">{college.name}</p>
+                      <p className="text-xs text-slate-500">{college.location}</p>
+                    </li>
+                  ))}
+                  {colleges.length > 4 && (
+                    <li className="text-xs text-slate-500">and {colleges.length - 4} more available colleges...</li>
+                  )}
+                </ul>
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end gap-3">
               <button

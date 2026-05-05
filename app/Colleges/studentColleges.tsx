@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Menu, Bell, LogOut, Settings, User } from 'lucide-react';
 
@@ -10,96 +10,104 @@ interface College {
   location: string;
   description: string;
   program?: string;
-  status?: string;
+  status: 'Available' | 'Unavailable';
   buttonColor?: 'cyan' | 'yellow' | 'green' | 'teal';
   buttonAction?: string;
+  applicationDeadline?: string;
+  requirements?: string[];
+  contactEmail?: string;
 }
 
 export default function StudentColleges() {
   const router = useRouter();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const [colleges, setColleges] = useState<College[]>([
-    {
-      id: 1,
-      name: 'University of the Philippines',
-      location: 'Quezon City, Philippines',
-      description: 'Leading national university',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 2,
-      name: 'Ateneo de Manila University',
-      location: 'Quezon City, Philippines',
-      description: 'Private Catholic institution',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 3,
-      name: 'De La Salle University',
-      location: 'Manila, Philippines',
-      description: 'Lasallian educational excellence',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 4,
-      name: 'Polytechnic University of the Philippines',
-      location: 'Manila, Philippines',
-      description: 'Technical university leading innovation',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 5,
-      name: 'University of Santo Tomas',
-      location: 'Manila, Philippines',
-      description: 'Oldest Catholic university in the Philippines',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 6,
-      name: 'Mapúa University',
-      location: 'Manila, Philippines',
-      description: 'Excellence in science and technology education',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 7,
-      name: 'University of Asia and the Pacific',
-      location: 'Makati, Philippines',
-      description: 'Premier business and economics school',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-    {
-      id: 8,
-      name: 'Adamson University',
-      location: 'Manila, Philippines',
-      description: 'Jesuit-founded technological university',
-      status: 'Available',
-      buttonColor: 'cyan',
-      buttonAction: 'APPLY',
-    },
-  ]);
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch colleges on component mount
+  useEffect(() => {
+    const fetchColleges = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/server/colleges?status=Available');
+        if (!response.ok) {
+          throw new Error('Failed to fetch colleges');
+        }
+        const data = await response.json();
+        setColleges(data);
+      } catch (err) {
+        console.error('Error fetching colleges:', err);
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchColleges();
+  }, []);
 
   const getButtonColor = (color?: string) => {
     return 'bg-cyan-400 hover:bg-cyan-500 text-white';
   };
 
-  const handleEdit = (id: number) => {
-    console.log('Apply to college:', id);
+  const handleApply = async (college: College) => {
+    try {
+      // Create application via API
+      const applicationData = {
+        studentId: 1, // In a real app, this would come from authentication
+        studentName: 'Juan dela Cruz',
+        collegeId: college.id,
+        collegeName: college.name,
+        program: 'General Application', // Could be made dynamic
+      };
+
+      const response = await fetch('/server/applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(applicationData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit application');
+      }
+
+      alert(`Application submitted to ${college.name}!`);
+      // Optionally refresh the page or update state
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      alert('Failed to submit application. Please try again.');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading colleges...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Error loading colleges: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -203,24 +211,36 @@ export default function StudentColleges() {
                 {/* Header with College Name and Status */}
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">{college.name}</h3>
-                  <span className="text-xs font-medium text-gray-600">{college.status || 'Available'}</span>
+                  <span className="text-xs font-medium text-gray-600">{college.status}</span>
+                </div>
+
+                {/* Location and Description */}
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-2">{college.location}</p>
+                  <p className="text-sm text-gray-700">{college.description}</p>
                 </div>
 
                 {/* Required Documents Section */}
-                <div className="mb-4 pb-4 border-b border-gray-200">
-                  <p className="text-xs font-bold text-gray-900 mb-2">REQUIRED DOCUMENTS</p>
-                  <div className="flex gap-2 flex-wrap">
-                    <span className="text-xs bg-gray-200 text-gray-700 px-3 py-1 rounded">Transcript</span>
-                    <span className="text-xs bg-gray-200 text-gray-700 px-3 py-1 rounded">School Certificate</span>
-                    <span className="text-xs bg-gray-200 text-gray-700 px-3 py-1 rounded">Form 138</span>
+                {college.requirements && college.requirements.length > 0 && (
+                  <div className="mb-4 pb-4 border-b border-gray-200">
+                    <p className="text-xs font-bold text-gray-900 mb-2">REQUIRED DOCUMENTS</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {college.requirements.map((req, index) => (
+                        <span key={index} className="text-xs bg-gray-200 text-gray-700 px-3 py-1 rounded">
+                          {req}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Deadline and Action Button */}
                 <div className="flex justify-between items-center">
-                  <p className="text-xs text-gray-600">Deadline: March 15, 2025</p>
+                  <p className="text-xs text-gray-600">
+                    Deadline: {college.applicationDeadline ? new Date(college.applicationDeadline).toLocaleDateString() : 'TBD'}
+                  </p>
                   <button
-                    onClick={() => handleEdit(college.id)}
+                    onClick={() => handleApply(college)}
                     className={`px-6 py-2 rounded-full font-bold text-xs transition whitespace-nowrap ${getButtonColor(
                       college.buttonColor
                     )}`}
