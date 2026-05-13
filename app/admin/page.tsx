@@ -39,7 +39,7 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl space-y-10">
-        <div className="flex flex-col gap-6 rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-slate-200 sm:p-10">
+        <div className="flex flex-col gap-6 rounded-4xl bg-white p-8 shadow-sm ring-1 ring-slate-200 sm:p-10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Admin Dashboard</p>
@@ -85,7 +85,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <section className="rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-slate-200 sm:mt-6">
+        <section className="rounded-4xl bg-white p-8 shadow-sm ring-1 ring-slate-200 sm:mt-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Recent Registrations</p>
