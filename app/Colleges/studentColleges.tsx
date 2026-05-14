@@ -3,6 +3,7 @@
 import { useState, useEffect, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Menu, Bell, LogOut, Settings, User } from 'lucide-react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface College {
   id: number;
@@ -25,28 +26,71 @@ export default function StudentColleges() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedFilesByCollege, setSelectedFilesByCollege] = useState<Record<number, File[]>>({});
+  const [avatarLetters, setAvatarLetters] = useState('S');
 
-  // Fetch colleges on component mount
   useEffect(() => {
-    const fetchColleges = async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
         setLoading(true);
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user || cancelled) {
+          setLoading(false);
+          router.replace('/');
+          return;
+        }
+
+        const profileRes = await fetch('/server/profile');
+        if (!profileRes.ok || cancelled) {
+          setLoading(false);
+          router.replace('/');
+          return;
+        }
+
+        const profile = (await profileRes.json()) as { role: string; fullName: string };
+        if (profile.role !== 'student' || cancelled) {
+          setLoading(false);
+          router.replace('/');
+          return;
+        }
+
+        const name = profile.fullName?.trim() || 'Student';
+        const parts = name.split(/\s+/).filter(Boolean);
+        const letters =
+          parts.length >= 2
+            ? `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase()
+            : name.slice(0, 2).toUpperCase();
+        setAvatarLetters(letters || 'S');
+
         const response = await fetch('/server/colleges?status=Available');
         if (!response.ok) {
           throw new Error('Failed to fetch colleges');
         }
         const data = await response.json();
-        setColleges(data);
+        if (!cancelled) {
+          setColleges(data);
+        }
       } catch (err) {
         console.error('Error fetching colleges:', err);
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'An error occurred');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchColleges();
-  }, []);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const getButtonColor = (color?: string) => {
     return 'bg-cyan-400 hover:bg-cyan-500 text-white';
@@ -66,11 +110,9 @@ export default function StudentColleges() {
       const selectedFiles = selectedFilesByCollege[college.id] || [];
 
       const applicationData = {
-        studentId: 1, // In a real app, this would come from authentication
-        studentName: 'Juan dela Cruz',
         collegeId: college.id,
         collegeName: college.name,
-        program: 'General Application', // Could be made dynamic
+        program: college.program || college.description || 'General Application',
         documents: selectedFiles.map((file) => file.name),
       };
 
@@ -148,7 +190,7 @@ export default function StudentColleges() {
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center cursor-pointer hover:bg-gray-700 transition"
               >
-                <span className="text-white font-bold text-sm">J</span>
+                <span className="text-white font-bold text-sm">{avatarLetters}</span>
               </button>
 
               {profileDropdownOpen && (
@@ -175,8 +217,14 @@ export default function StudentColleges() {
                   </button>
                   <hr className="my-2" />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setProfileDropdownOpen(false);
+                      try {
+                        const supabase = createSupabaseBrowserClient();
+                        await supabase.auth.signOut();
+                      } catch {
+                        /* still navigate home */
+                      }
                       router.push('/');
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-50 transition-all duration-200 text-left"

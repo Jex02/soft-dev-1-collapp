@@ -77,6 +77,21 @@
   flex-wrap: wrap;
 }
 
+.hero__admin-link {
+  margin-top: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.hero__admin-link a {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hero__admin-link a:hover {
+  color: #ffffff;
+}
+
 .button {
   min-width: 140px;
   padding: 0.95rem 1.6rem;

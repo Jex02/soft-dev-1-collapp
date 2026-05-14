@@ -1,11 +1,12 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import './landingpage.css';
 import StudentLogin from './Register/StudentLogin';
 import SchoolRepLogin from './Register/SchoolRepLogin';
-import { Account, loadAccounts, saveAccounts } from './Register/accounts';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -40,10 +41,9 @@ export default function LandingPage() {
     setShowConfirmPassword(false);
   };
 
-  const handleSignUp = (event: FormEvent<HTMLFormElement>) => {
+  const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const accounts = loadAccounts();
     const normalizedUsername = username.trim().toLowerCase();
 
     if (!fullName.trim() || !email.trim() || !normalizedUsername || !password.trim()) {
@@ -51,8 +51,8 @@ export default function LandingPage() {
       return;
     }
 
-    if (password.length < 5) {
-      setError('Password must be at least 5 characters long.');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters (Supabase default).');
       return;
     }
 
@@ -61,35 +61,59 @@ export default function LandingPage() {
       return;
     }
 
-    if (accounts[normalizedUsername]) {
+    let supabase;
+    try {
+      supabase = createSupabaseBrowserClient();
+    } catch {
+      setError('Missing Supabase env vars. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.');
+      return;
+    }
+
+    const { data: available, error: rpcError } = await supabase.rpc('username_available', {
+      check_username: normalizedUsername,
+    });
+
+    if (rpcError) {
+      setError('Could not verify username. Run supabase/schema.sql in your Supabase SQL editor.');
+      return;
+    }
+
+    if (!available) {
       setError('That username is already taken.');
       return;
     }
 
-    const newAccount: Account = {
-      password,
-      route: '/StudentDashboard',
-      type: 'student',
-      fullName: fullName.trim(),
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
-    };
+      password,
+      options: {
+        data: {
+          username: normalizedUsername,
+          full_name: fullName.trim(),
+        },
+      },
+    });
 
-    const updatedAccounts = {
-      ...accounts,
-      [normalizedUsername]: newAccount,
-    };
+    if (error) {
+      setError(error.message);
+      return;
+    }
 
-    saveAccounts(updatedAccounts);
-    setError('');
-    setPanelType(null);
-    setFullName('');
-    setEmail('');
-    setUsername('');
-    setPassword('');
-    setConfirmPassword('');
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-    router.push(newAccount.route);
+    if (data.session) {
+      setError('');
+      setFullName('');
+      setEmail('');
+      setUsername('');
+      setPassword('');
+      setConfirmPassword('');
+      setShowPassword(false);
+      setShowConfirmPassword(false);
+      setPanelType(null);
+      router.push('/StudentDashboard');
+      return;
+    }
+
+    setError('Account created. If Supabase requires email confirmation, check your inbox before signing in.');
   };
 
   return (
@@ -128,6 +152,9 @@ export default function LandingPage() {
               Sign Up
             </button>
           </div>
+          <p className="hero__admin-link">
+            <Link href="/admin-login">Administrator sign in</Link>
+          </p>
         </div>
       </section>
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { FileText, CheckCircle, Clock, MapPin, Bell, LogOut, Settings, User, RefreshCw } from 'lucide-react';
 import './StudentDashboard.css';
 
@@ -16,7 +17,7 @@ interface ApplicationStats {
 
 interface Application {
   id: number;
-  studentId: number;
+  studentId: string;
   studentName: string;
   collegeId: number;
   collegeName: string;
@@ -47,52 +48,95 @@ export default function StudentDashboard() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [studentName, setStudentName] = useState('Student');
+  const [avatarLetters, setAvatarLetters] = useState('S');
+  const [sessionReady, setSessionReady] = useState(false);
 
-  const studentName = 'Juan dela Cruz';
-  const studentId = 1; // In a real app, this would come from authentication
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch student's applications
-      const applicationsResponse = await fetch(`/server/applications?studentId=${studentId}`);
+      const applicationsResponse = await fetch('/server/applications');
       if (!applicationsResponse.ok) {
         throw new Error('Failed to fetch applications');
       }
       const applicationsData = await applicationsResponse.json();
       setApplications(applicationsData);
 
-      // Fetch available colleges
       const collegesResponse = await fetch('/server/colleges?status=Available');
       if (!collegesResponse.ok) {
         throw new Error('Failed to fetch colleges');
       }
       const collegesData = await collegesResponse.json();
       setColleges(collegesData);
-
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Fetch applications and colleges on component mount
+  const checkedRef = useRef(false);
+
   useEffect(() => {
+    if (checkedRef.current) return;
+    checkedRef.current = true;
+
+    const verifyStudent = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace('/');
+          return;
+        }
+
+        const profileRes = await fetch('/server/profile');
+        if (!profileRes.ok) {
+          router.replace('/');
+          return;
+        }
+
+        const profile = (await profileRes.json()) as {
+          role: string;
+          fullName: string;
+        };
+        if (profile.role !== 'student') {
+          router.replace('/');
+          return;
+        }
+
+        const name = profile.fullName?.trim() || 'Student';
+        const parts = name.split(' ');
+        setStudentName(name);
+        setAvatarLetters(
+          parts.length >= 2
+            ? `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase()
+            : name.slice(0, 2).toUpperCase()
+        );
+        setSessionReady(true);
+      } catch {
+        router.replace('/');
+      }
+    };
+
+    verifyStudent();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!sessionReady) return;
     fetchData();
-  }, [studentId]);
+  }, [sessionReady, fetchData]);
 
-  // Optional: Poll for updates every 30 seconds
   useEffect(() => {
+    if (!sessionReady) return;
     const interval = setInterval(() => {
       fetchData();
-    }, 30000); // 30 seconds
-
+    }, 30000);
     return () => clearInterval(interval);
-  }, [studentId]);
+  }, [sessionReady, fetchData]);
 
   const totalApplications = applications.length;
   const acceptedApplications = applications.filter(
@@ -256,7 +300,7 @@ export default function StudentDashboard() {
                 className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded-full transition-all duration-200"
               >
                 <div className="w-8 h-8 bg-linear-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  JD
+                  {avatarLetters}
                 </div>
               </button>
 
@@ -285,8 +329,14 @@ export default function StudentDashboard() {
                   </button>
                   <hr className="my-2" />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setProfileDropdownOpen(false);
+                      try {
+                        const supabase = createSupabaseBrowserClient();
+                        await supabase.auth.signOut();
+                      } catch {
+                        /* still navigate home */
+                      }
                       router.push('/');
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-50 transition-all duration-200 text-left"

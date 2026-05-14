@@ -1,52 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-interface Application {
+type AppStatus = 'Pending' | 'Under Review' | 'Accepted' | 'Rejected';
+
+interface ApplicationRow {
   id: number;
-  studentId: number;
-  studentName: string;
-  collegeId: number;
-  collegeName: string;
+  student_id: string;
+  student_name: string;
+  college_id: number;
+  college_name: string;
   program: string;
-  status: 'Pending' | 'Under Review' | 'Accepted' | 'Rejected';
-  appliedDate: string;
-  updatedAt: string;
-  documents?: string[];
-  notes?: string;
+  status: AppStatus;
+  applied_date: string;
+  updated_at: string;
+  documents: unknown;
+  notes: string | null;
 }
 
-// In-memory storage (replace with database later)
-const applications: Application[] = [
-  {
-    id: 1,
-    studentId: 1,
-    studentName: 'Juan dela Cruz',
-    collegeId: 2,
-    collegeName: 'Ateneo de Manila University',
-    program: 'Business Administration',
-    status: 'Under Review',
-    appliedDate: '2026-04-15T10:00:00Z',
-    updatedAt: '2026-04-15T10:00:00Z',
-    documents: ['transcript.pdf', 'recommendation.pdf'],
-    notes: 'Strong academic record',
-  },
-  {
-    id: 2,
-    studentId: 1,
-    studentName: 'Juan dela Cruz',
-    collegeId: 3,
-    collegeName: 'De La Salle University',
-    program: 'Industrial Engineering',
-    status: 'Accepted',
-    appliedDate: '2026-04-10T14:30:00Z',
-    updatedAt: '2026-04-20T09:15:00Z',
-    documents: ['transcript.pdf', 'portfolio.pdf'],
-    notes: 'Accepted - excellent fit for program',
-  },
-];
+function mapApplication(row: ApplicationRow) {
+  const docs = Array.isArray(row.documents)
+    ? (row.documents as string[])
+    : typeof row.documents === 'string'
+      ? [row.documents]
+      : [];
 
-// GET - Retrieve applications (all, by student, by college, or specific application)
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    collegeId: row.college_id,
+    collegeName: row.college_name,
+    program: row.program,
+    status: row.status,
+    appliedDate: row.applied_date,
+    updatedAt: row.updated_at,
+    documents: docs,
+    notes: row.notes ?? undefined,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const studentId = searchParams.get('studentId');
@@ -54,120 +67,198 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
 
     if (id) {
-      const application = applications.find(a => a.id === parseInt(id));
-      if (!application) {
+      let single = supabase.from('applications').select('*').eq('id', parseInt(id, 10));
+      if (profile.role === 'student') {
+        single = single.eq('student_id', user.id);
+      }
+      const { data, error } = await single.maybeSingle();
+      if (error) {
+        console.error('applications GET:', error);
+        return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 });
+      }
+      if (!data) {
         return NextResponse.json({ error: 'Application not found' }, { status: 404 });
       }
-      return NextResponse.json(application);
+      return NextResponse.json(mapApplication(data as ApplicationRow));
     }
 
-    let filteredApplications = applications;
+    let query = supabase.from('applications').select('*').order('id', { ascending: true });
 
-    if (studentId) {
-      filteredApplications = filteredApplications.filter(a => a.studentId === parseInt(studentId));
+    if (profile.role === 'student') {
+      query = query.eq('student_id', user.id);
+    } else if (profile.role === 'school_rep' && studentId) {
+      query = query.eq('student_id', studentId);
     }
+
+    const { data: rows, error } = await query;
+    if (error) {
+      console.error('applications GET:', error);
+      return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 });
+    }
+
+    let list = (rows ?? []) as ApplicationRow[];
 
     if (collegeId) {
-      filteredApplications = filteredApplications.filter(a => a.collegeId === parseInt(collegeId));
+      list = list.filter((a) => a.college_id === parseInt(collegeId, 10));
     }
-
     if (status) {
-      filteredApplications = filteredApplications.filter(a => a.status.toLowerCase() === status.toLowerCase());
+      const s = status.toLowerCase();
+      list = list.filter((a) => a.status.toLowerCase() === s);
     }
 
-    return NextResponse.json(filteredApplications);
-  } catch (error) {
-    console.error('Error fetching applications:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(list.map(mapApplication));
+  } catch (e) {
+    console.error('applications GET:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }
 
-// POST - Create a new application
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // Validate required fields
-    const { studentId, studentName, collegeId, collegeName, program } = body;
-    if (!studentId || !studentName || !collegeId || !collegeName || !program) {
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('full_name, role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || !profile || profile.role !== 'student') {
+      return NextResponse.json({ error: 'Only students can create applications' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { collegeId, collegeName, program } = body;
+    const documents = Array.isArray(body.documents) ? body.documents : [];
+
+    if (!collegeId || !collegeName || !program) {
       return NextResponse.json(
-        { error: 'Student ID, name, college ID, name, and program are required' },
+        { error: 'College ID, college name, and program are required' },
         { status: 400 }
       );
     }
 
-    // Check if student already applied to this college/program
-    const existingApplication = applications.find(
-      a => a.studentId === studentId && a.collegeId === collegeId && a.program === program
-    );
-    if (existingApplication) {
+    const { data: existing, error: exErr } = await supabase
+      .from('applications')
+      .select('id')
+      .eq('student_id', user.id)
+      .eq('college_id', collegeId)
+      .eq('program', program)
+      .maybeSingle();
+
+    if (exErr) {
+      console.error('applications POST duplicate check:', exErr);
+      return NextResponse.json({ error: 'Failed to validate application' }, { status: 500 });
+    }
+
+    if (existing) {
       return NextResponse.json(
         { error: 'Student has already applied to this program at this college' },
         { status: 409 }
       );
     }
 
-    // Generate new ID
-    const newId = Math.max(...applications.map(a => a.id), 0) + 1;
+    const studentName = (profile.full_name as string)?.trim() || 'Student';
 
-    const newApplication: Application = {
-      id: newId,
-      studentId,
-      studentName,
-      collegeId,
-      collegeName,
-      program,
-      status: 'Pending',
-      appliedDate: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      documents: body.documents || [],
-      notes: body.notes,
-    };
+    const { data: inserted, error } = await supabase
+      .from('applications')
+      .insert({
+        student_id: user.id,
+        student_name: studentName,
+        college_id: collegeId,
+        college_name: collegeName,
+        program,
+        status: 'Pending',
+        documents,
+      })
+      .select('*')
+      .single();
 
-    applications.push(newApplication);
+    if (error || !inserted) {
+      console.error('applications POST:', error);
+      return NextResponse.json({ error: 'Failed to create application' }, { status: 500 });
+    }
 
-    return NextResponse.json(newApplication, { status: 201 });
-  } catch (error) {
-    console.error('Error creating application:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(mapApplication(inserted as ApplicationRow), { status: 201 });
+  } catch (e) {
+    console.error('applications POST:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }
 
-// PUT - Update an application (e.g., change status, add notes)
 export async function PUT(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
       return NextResponse.json({ error: 'Application ID is required' }, { status: 400 });
-    }
-
-    const applicationIndex = applications.findIndex(a => a.id === parseInt(id));
-    if (applicationIndex === -1) {
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
     }
 
     const body = await request.json();
-    const updatedApplication = {
-      ...applications[applicationIndex],
-      ...body,
-      id: parseInt(id), // Ensure ID doesn't change
-      updatedAt: new Date().toISOString(),
+    const patch: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
     };
 
-    applications[applicationIndex] = updatedApplication;
+    if (body.status !== undefined) patch.status = body.status;
+    if (body.notes !== undefined) patch.notes = body.notes;
+    if (body.documents !== undefined) patch.documents = body.documents;
 
-    return NextResponse.json(updatedApplication);
-  } catch (error) {
-    console.error('Error updating application:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const { data: updated, error } = await supabase
+      .from('applications')
+      .update(patch)
+      .eq('id', parseInt(id, 10))
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('applications PUT:', error);
+      return NextResponse.json({ error: 'Application not found or update failed' }, { status: 404 });
+    }
+
+    return NextResponse.json(mapApplication(updated as ApplicationRow));
+  } catch (e) {
+    console.error('applications PUT:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }
 
-// DELETE - Delete an application
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -175,19 +266,26 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Application ID is required' }, { status: 400 });
     }
 
-    const applicationIndex = applications.findIndex(a => a.id === parseInt(id));
-    if (applicationIndex === -1) {
+    const { data: deleted, error } = await supabase
+      .from('applications')
+      .delete()
+      .eq('id', parseInt(id, 10))
+      .select('*')
+      .single();
+
+    if (error || !deleted) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 });
     }
 
-    const deletedApplication = applications.splice(applicationIndex, 1)[0];
-
     return NextResponse.json({
       message: 'Application deleted successfully',
-      deletedApplication
+      deletedApplication: mapApplication(deleted as ApplicationRow),
     });
-  } catch (error) {
-    console.error('Error deleting application:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (e) {
+    console.error('applications DELETE:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }

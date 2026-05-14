@@ -1,115 +1,109 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-interface College {
+interface CollegeRow {
   id: number;
   name: string;
   location: string;
-  description?: string;
-  program?: string;
+  description: string;
+  program: string;
   status: 'Available' | 'Unavailable';
-  buttonColor?: 'cyan' | 'yellow' | 'green' | 'teal';
-  buttonAction?: string;
-  applicationDeadline?: string;
-  requirements?: string[];
-  contactEmail?: string;
-  createdAt: string;
-  updatedAt: string;
+  button_color: string | null;
+  button_action: string | null;
+  application_deadline: string | null;
+  requirements: string[] | null;
+  contact_email: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-const normalizeCollege = (college: College) => {
-  const requirements = Array.isArray(college.requirements)
-    ? college.requirements
-    : typeof college.requirements === 'string'
-    ? (college.requirements as string).split(',').map((item) => item.trim()).filter(Boolean)
-    : [];
+function mapCollege(row: CollegeRow) {
+  const requirements = Array.isArray(row.requirements)
+    ? row.requirements
+    : typeof row.requirements === 'string'
+      ? (row.requirements as string).split(',').map((item) => item.trim()).filter(Boolean)
+      : [];
 
   return {
-    ...college,
-    program: college.program || college.description || '',
+    id: row.id,
+    name: row.name,
+    location: row.location,
+    description: row.description,
+    program: row.program || row.description || '',
+    status: row.status,
+    buttonColor: (row.button_color as 'cyan' | 'yellow' | 'green' | 'teal') || 'cyan',
+    buttonAction: row.button_action || 'APPLY',
+    applicationDeadline: row.application_deadline ?? undefined,
     requirements,
+    contactEmail: row.contact_email ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
-};
+}
 
-// In-memory storage (replace with database later)
-const colleges: College[] = [
-  {
-    id: 1,
-    name: 'University of the Philippines',
-    location: 'Quezon City, Philippines',
-    description: 'Leading national university',
-    status: 'Available',
-    buttonColor: 'cyan',
-    buttonAction: 'APPLY',
-    applicationDeadline: '2026-06-30',
-    requirements: ['High School Diploma', 'Entrance Exam', 'Interview'],
-    contactEmail: 'admissions@up.edu.ph',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    name: 'Ateneo de Manila University',
-    location: 'Quezon City, Philippines',
-    description: 'Private Catholic institution',
-    status: 'Available',
-    buttonColor: 'cyan',
-    buttonAction: 'APPLY',
-    applicationDeadline: '2026-05-15',
-    requirements: ['High School Diploma', 'ACET Exam', 'Essay'],
-    contactEmail: 'admissions@ateneo.edu',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    name: 'De La Salle University',
-    location: 'Manila, Philippines',
-    description: 'Lasallian educational excellence',
-    status: 'Available',
-    buttonColor: 'cyan',
-    buttonAction: 'APPLY',
-    applicationDeadline: '2026-04-30',
-    requirements: ['High School Diploma', 'DLSU College Admission Test', 'Interview'],
-    contactEmail: 'admissions@dlsu.edu.ph',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-// GET - Retrieve all colleges or a specific college
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const status = searchParams.get('status');
 
     if (id) {
-      const college = colleges.find(c => c.id === parseInt(id));
-      if (!college) {
+      const { data, error } = await supabase.from('colleges').select('*').eq('id', parseInt(id, 10)).maybeSingle();
+      if (error) {
+        console.error('colleges GET:', error);
+        return NextResponse.json({ error: 'Failed to fetch colleges' }, { status: 500 });
+      }
+      if (!data) {
         return NextResponse.json({ error: 'College not found' }, { status: 404 });
       }
-      return NextResponse.json(normalizeCollege(college));
+      return NextResponse.json(mapCollege(data as CollegeRow));
     }
 
-    let filteredColleges = colleges;
+    let query = supabase.from('colleges').select('*').order('id', { ascending: true });
+
+    const { data: rows, error } = await query;
+    if (error) {
+      console.error('colleges GET:', error);
+      return NextResponse.json({ error: 'Failed to fetch colleges' }, { status: 500 });
+    }
+
+    let list = (rows ?? []) as CollegeRow[];
 
     if (status) {
-      filteredColleges = colleges.filter(c => c.status.toLowerCase() === status.toLowerCase());
+      list = list.filter((c) => c.status.toLowerCase() === status.toLowerCase());
     }
 
-    return NextResponse.json(filteredColleges.map(normalizeCollege));
-  } catch (error) {
-    console.error('Error fetching colleges:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(list.map(mapCollege));
+  } catch (e) {
+    console.error('colleges GET:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }
 
-// POST - Create a new college
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // Validate required fields
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
     const { name, location, description, program } = body;
     if (!name || !location || !(description || program)) {
       return NextResponse.json(
@@ -118,93 +112,131 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if college with same name already exists
-    const existingCollege = colleges.find(c => c.name.toLowerCase() === name.toLowerCase());
-    if (existingCollege) {
-      return NextResponse.json(
-        { error: 'College with this name already exists' },
-        { status: 409 }
-      );
-    }
-
-    // Generate new ID
-    const newId = Math.max(...colleges.map(c => c.id), 0) + 1;
-
     const normalizedRequirements = Array.isArray(body.requirements)
       ? body.requirements
       : typeof body.requirements === 'string'
-      ? body.requirements.split(',').map((item: string) => item.trim()).filter(Boolean)
-      : [];
+        ? body.requirements.split(',').map((item: string) => item.trim()).filter(Boolean)
+        : [];
 
-    const newCollege: College = {
-      id: newId,
-      name,
-      location,
-      description: body.description || body.program || '',
-      program: body.program || body.description || '',
-      status: body.status || 'Available',
-      buttonColor: body.buttonColor || 'cyan',
-      buttonAction: body.buttonAction || 'APPLY',
-      applicationDeadline: body.applicationDeadline,
-      requirements: normalizedRequirements,
-      contactEmail: body.contactEmail,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    const { data: inserted, error } = await supabase
+      .from('colleges')
+      .insert({
+        name,
+        location,
+        description: body.description || body.program || '',
+        program: body.program || body.description || '',
+        status: body.status || 'Available',
+        button_color: body.buttonColor || 'cyan',
+        button_action: body.buttonAction || 'APPLY',
+        application_deadline: body.applicationDeadline || null,
+        requirements: normalizedRequirements,
+        contact_email: body.contactEmail || null,
+      })
+      .select('*')
+      .single();
 
-    colleges.push(newCollege);
+    if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'College with this name already exists' }, { status: 409 });
+      }
+      console.error('colleges POST:', error);
+      return NextResponse.json({ error: 'Failed to create college' }, { status: 500 });
+    }
 
-    return NextResponse.json(normalizeCollege(newCollege), { status: 201 });
-  } catch (error) {
-    console.error('Error creating college:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(mapCollege(inserted as CollegeRow), { status: 201 });
+  } catch (e) {
+    console.error('colleges POST:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }
 
-// PUT - Update an existing college
 export async function PUT(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
       return NextResponse.json({ error: 'College ID is required' }, { status: 400 });
-    }
-
-    const collegeIndex = colleges.findIndex(c => c.id === parseInt(id));
-    if (collegeIndex === -1) {
-      return NextResponse.json({ error: 'College not found' }, { status: 404 });
     }
 
     const body = await request.json();
+
+    const { data: existing, error: fetchErr } = await supabase
+      .from('colleges')
+      .select('*')
+      .eq('id', parseInt(id, 10))
+      .maybeSingle();
+
+    if (fetchErr || !existing) {
+      return NextResponse.json({ error: 'College not found' }, { status: 404 });
+    }
+
+    const prev = existing as CollegeRow;
     const normalizedRequirements = Array.isArray(body.requirements)
       ? body.requirements
       : typeof body.requirements === 'string'
-      ? body.requirements.split(',').map((item: string) => item.trim()).filter(Boolean)
-      : colleges[collegeIndex].requirements;
+        ? body.requirements.split(',').map((item: string) => item.trim()).filter(Boolean)
+        : prev.requirements ?? [];
 
-    const updatedCollege = {
-      ...colleges[collegeIndex],
-      ...body,
-      id: parseInt(id), // Ensure ID doesn't change
-      program: body.program || body.description || colleges[collegeIndex].program || colleges[collegeIndex].description,
-      description: body.description || body.program || colleges[collegeIndex].description,
+    const patch = {
+      name: body.name ?? prev.name,
+      location: body.location ?? prev.location,
+      description: body.description ?? body.program ?? prev.description,
+      program: body.program ?? body.description ?? prev.program,
+      status: body.status ?? prev.status,
+      button_color: body.buttonColor ?? prev.button_color,
+      button_action: body.buttonAction ?? prev.button_action,
+      application_deadline: body.applicationDeadline ?? prev.application_deadline,
       requirements: normalizedRequirements,
-      updatedAt: new Date().toISOString(),
+      contact_email: body.contactEmail ?? prev.contact_email,
+      updated_at: new Date().toISOString(),
     };
 
-    colleges[collegeIndex] = updatedCollege;
+    const { data: updated, error } = await supabase
+      .from('colleges')
+      .update(patch)
+      .eq('id', parseInt(id, 10))
+      .select('*')
+      .single();
 
-    return NextResponse.json(normalizeCollege(updatedCollege));
-  } catch (error) {
-    console.error('Error updating college:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    if (error || !updated) {
+      console.error('colleges PUT:', error);
+      return NextResponse.json({ error: 'Failed to update college' }, { status: 500 });
+    }
+
+    return NextResponse.json(mapCollege(updated as CollegeRow));
+  } catch (e) {
+    console.error('colleges PUT:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }
 
-// DELETE - Delete a college
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -212,19 +244,26 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'College ID is required' }, { status: 400 });
     }
 
-    const collegeIndex = colleges.findIndex(c => c.id === parseInt(id));
-    if (collegeIndex === -1) {
+    const { data: deleted, error } = await supabase
+      .from('colleges')
+      .delete()
+      .eq('id', parseInt(id, 10))
+      .select('*')
+      .single();
+
+    if (error || !deleted) {
       return NextResponse.json({ error: 'College not found' }, { status: 404 });
     }
 
-    const deletedCollege = colleges.splice(collegeIndex, 1)[0];
-
     return NextResponse.json({
       message: 'College deleted successfully',
-      deletedCollege
+      deletedCollege: mapCollege(deleted as CollegeRow),
     });
-  } catch (error) {
-    console.error('Error deleting college:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (e) {
+    console.error('colleges DELETE:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server misconfigured' },
+      { status: 503 }
+    );
   }
 }

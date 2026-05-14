@@ -1,5 +1,9 @@
+'use client';
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Building2, ChevronRight, UserCircle2, UserPlus2, Wrench } from "lucide-react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const cards = [
   {
@@ -11,8 +15,9 @@ const cards = [
   },
   {
     title: "Add School Reps",
-    value: "5",
+    value: "2",
     icon: UserPlus2,
+    href: "/admin/manageuser",
     className: "bg-slate-800 text-white",
   },
   {
@@ -36,9 +41,36 @@ const registrations = [
 ];
 
 export default function AdminPage() {
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      /* ignore */
+    }
+    router.push("/admin-login");
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl space-y-10">
+        <div className="flex justify-end gap-2">
+          <Link
+            href="/admin-login"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Switch account
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Sign out
+          </button>
+        </div>
         <div className="flex flex-col gap-6 rounded-4xl bg-white p-8 shadow-sm ring-1 ring-slate-200 sm:p-10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

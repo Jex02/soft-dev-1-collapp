@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Bell, LogOut, Settings, User } from 'lucide-react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import './schoolrep.css';
 
 interface Applicant {
   id: number;
-  studentId: number;
+  studentId: string;
   studentName: string;
   collegeId: number;
   collegeName: string;
@@ -28,9 +29,9 @@ interface College {
   description?: string;
   location: string;
   status: 'Available' | 'Unavailable';
-  applicationDeadline: string;
+  applicationDeadline?: string;
   requirements: string | string[];
-  contactEmail: string;
+  contactEmail?: string;
 }
 
 interface CollegeFormState {
@@ -68,6 +69,8 @@ export default function SchoolRepPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [repCollegeName, setRepCollegeName] = useState<string | null>(null);
 
   const pendingCount = applicants.filter((applicant) => applicant.status === 'Pending' || applicant.status === 'Under Review').length;
   const pendingApplicants = applicants.filter((applicant) => applicant.status === 'Pending' || applicant.status === 'Under Review');
@@ -127,7 +130,56 @@ export default function SchoolRepPage() {
     }
   };
 
+  const checkedRef = useRef(false);
+
   useEffect(() => {
+    if (checkedRef.current) return;
+    checkedRef.current = true;
+
+    const verifyRep = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace('/');
+          return;
+        }
+
+        const profileRes = await fetch('/server/profile');
+        if (!profileRes.ok) {
+          router.replace('/');
+          return;
+        }
+
+        const profile = (await profileRes.json()) as {
+          role: string;
+          collegeId: number | null;
+          collegeName: string | null;
+        };
+        if (profile.role !== 'school_rep') {
+          router.replace('/');
+          return;
+        }
+        if (profile.collegeId == null) {
+          router.replace('/');
+          return;
+        }
+
+        setRepCollegeName(profile.collegeName);
+        setAuthReady(true);
+      } catch {
+        router.replace('/');
+      }
+    };
+
+    verifyRep();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!authReady) return;
+
     const fetchColleges = async () => {
       try {
         setLoading(true);
@@ -149,9 +201,11 @@ export default function SchoolRepPage() {
     };
 
     fetchColleges();
-  }, []);
+  }, [authReady]);
 
   useEffect(() => {
+    if (!authReady) return;
+
     const fetchApplications = async () => {
       try {
         const response = await fetch('/server/applications');
@@ -160,19 +214,23 @@ export default function SchoolRepPage() {
         }
 
         const data: Applicant[] = await response.json();
-        const mappedData = data.map(app => ({
+        const mappedData = data.map((app) => ({
           ...app,
-          initials: app.studentName.split(' ').map(n => n[0]).join('').toUpperCase(),
+          initials: app.studentName
+            .split(' ')
+            .map((n) => n[0])
+            .join('')
+            .toUpperCase(),
         }));
         setApplicants(mappedData);
-        setDeclinedApplicants(mappedData.filter(app => app.status === 'Rejected'));
+        setDeclinedApplicants(mappedData.filter((app) => app.status === 'Rejected'));
       } catch (err) {
         console.error('Error loading applications:', err);
       }
     };
 
     fetchApplications();
-  }, []);
+  }, [authReady]);
 
   const toggleCollegeAvailability = async (id: number) => {
     const college = colleges.find((item) => item.id === id);
@@ -291,9 +349,9 @@ export default function SchoolRepPage() {
       program: college.program || college.description || '',
       location: college.location,
       status: college.status,
-      applicationDeadline: college.applicationDeadline,
+      applicationDeadline: college.applicationDeadline ?? ' ',
       requirements,
-      contactEmail: college.contactEmail,
+      contactEmail: college.contactEmail ?? '',
     });
   };
 
@@ -416,8 +474,14 @@ export default function SchoolRepPage() {
                   </button>
                   <hr className="my-2" />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setProfileDropdownOpen(false);
+                      try {
+                        const supabase = createSupabaseBrowserClient();
+                        await supabase.auth.signOut();
+                      } catch {
+                        /* still navigate home */
+                      }
                       router.push('/');
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-rose-50 transition text-left"
@@ -437,9 +501,11 @@ export default function SchoolRepPage() {
           <div className="flex items-start justify-between gap-6">
             <div>
               <p className="text-sm uppercase tracking-[0.3em] text-slate-300">Welcome back</p>
-              <h2 className="mt-3 text-3xl font-semibold">School Rep dashboard</h2>
+              <h2 className="mt-3 text-3xl font-semibold">
+                {repCollegeName ? `${repCollegeName} — Rep dashboard` : 'School Rep dashboard'}
+              </h2>
               <p className="mt-2 max-w-2xl text-slate-200 leading-7">
-                Review student applications and decide who gets accepted.
+                You only see applications for your campus. Students applying to other schools are hidden by design.
               </p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 text-slate-100 shadow-lg min-w-36">
