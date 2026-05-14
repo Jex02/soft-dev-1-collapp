@@ -3,14 +3,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import {
-  Bell,
-  BookOpen,
-  Plus,
-  Search,
-  ChevronDown,
-  Filter,
-} from 'lucide-react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 type CollegeOption = { id: number; name: string };
@@ -108,6 +100,12 @@ export default function ManageUserPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
+              href="/admin/users"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              User management
+            </Link>
+            <Link
               href="/admin"
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
             >
@@ -200,78 +198,17 @@ export default function ManageUserPage() {
           </form>
         </div>
 
-        <div className="overflow-hidden rounded-[2rem] bg-white p-8 shadow-2xl ring-1 ring-slate-200">
-          <div className="flex flex-row flex-wrap items-start justify-between gap-8">
-            <div className="max-w-3xl">
-              <p className="text-xs uppercase tracking-[0.45em] text-blue-600">COLLAPP</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">User management</h2>
-              <p className="mt-3 text-base leading-7 text-slate-500">Browse users (coming soon)</p>
-            </div>
-            <div className="flex items-center gap-3 justify-end">
-              <button
-                type="button"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-3xl bg-white text-slate-600 shadow-sm ring-1 ring-slate-200"
-              >
-                <Bell className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-3xl bg-white text-slate-600 shadow-sm ring-1 ring-slate-200"
-              >
-                <BookOpen className="h-5 w-5" />
-              </button>
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
-                AD
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-10 rounded-[2rem] bg-slate-50 p-6 ring-1 ring-slate-200">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <label className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name or email..."
-                  className="w-full rounded-3xl border border-slate-200 bg-white py-3 pl-16 pr-4 text-sm outline-none focus:border-blue-300"
-                />
-              </label>
-              <label className="relative min-w-[150px] flex-[0_0_150px]">
-                <select className="w-full appearance-none rounded-3xl border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm outline-none">
-                  <option>All Roles</option>
-                  <option>Student</option>
-                  <option>School Rep</option>
-                  <option>Admin</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              </label>
-              <label className="relative min-w-[150px] flex-[0_0_150px]">
-                <select className="w-full appearance-none rounded-3xl border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm outline-none">
-                  <option>Sort by: Newest</option>
-                  <option>Sort by: Oldest</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              </label>
-              <button
-                type="button"
-                className="inline-flex h-12 min-w-[56px] items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm"
-              >
-                <Filter className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-12 rounded-[2rem] bg-slate-50 p-6 ring-1 ring-slate-200">
-            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-              User list will load from Supabase in a later iteration. Use the form above to provision UP and CIT reps.
-            </div>
-          </div>
+        <div className="overflow-hidden rounded-[2rem] bg-white p-6 shadow-xl ring-1 ring-slate-200 sm:p-8">
+          <h2 className="text-lg font-semibold text-slate-950">User directory</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Search, filter, and browse every account (live data from Supabase).
+          </p>
+          <Link
+            href="/admin/users"
+            className="mt-4 inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Open user management
+          </Link>
         </div>
       </div>
     </main>
