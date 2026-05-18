@@ -507,7 +507,7 @@ export default function SchoolRepPage() {
                   </button>
                   <button
                     onClick={() => {
-                      alert('Opening settings...');
+                      router.push('/settings');
                       setProfileDropdownOpen(false);
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-100 transition text-left"
