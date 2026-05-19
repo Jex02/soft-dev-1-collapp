@@ -119,14 +119,6 @@ export default function SchoolRepLogin({ onSwitchToSignUp }: SchoolRepLoginProps
           Login as school rep
         </button>
 
-        <p className="login-panel__footer">
-          School rep accounts are created in Supabase Auth and promoted to the school_rep role in the
-          database (see comments at the end of supabase/schema.sql). Students can{' '}
-          <button type="button" className="login-panel__footer-action" onClick={onSwitchToSignUp}>
-            sign up here
-          </button>
-          .
-        </p>
       </form>
     </>
   );
