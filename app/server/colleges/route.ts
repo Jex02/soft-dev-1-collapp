@@ -13,6 +13,7 @@ interface CollegeRow {
   application_deadline: string | null;
   requirements: string[] | null;
   contact_email: string | null;
+  logo_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,9 +37,48 @@ function mapCollege(row: CollegeRow) {
     applicationDeadline: row.application_deadline ?? undefined,
     requirements,
     contactEmail: row.contact_email ?? undefined,
+    logoUrl: row.logo_url ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+// Upload a base64 data URL to Supabase Storage and return the public URL.
+// Returns null if no image data provided or upload fails.
+async function uploadLogo(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  collegeId: number,
+  base64DataUrl: string | null | undefined,
+): Promise<string | null> {
+  if (!base64DataUrl || !base64DataUrl.startsWith('data:')) return null;
+
+  const match = base64DataUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+  if (!match) return null;
+
+  const mimeType = match[1];
+  const base64Data = match[2];
+  const ext = mimeType.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+  const filePath = `college-logos/${collegeId}.${ext}`;
+
+  const buffer = Buffer.from(base64Data, 'base64');
+
+  const { error } = await supabase.storage
+    .from('college-logos')
+    .upload(filePath, buffer, {
+      contentType: mimeType,
+      upsert: true,
+    });
+
+  if (error) {
+    console.error('logo upload error:', error);
+    return null;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('college-logos')
+    .getPublicUrl(filePath);
+
+  return urlData?.publicUrl ?? null;
 }
 
 export async function GET(request: NextRequest) {
@@ -65,7 +105,11 @@ export async function GET(request: NextRequest) {
       if (!data) {
         return NextResponse.json({ error: 'College not found' }, { status: 404 });
       }
-      return NextResponse.json(mapCollege(data as CollegeRow));
+      const { count } = await supabase
+        .from('applications')
+        .select('id', { count: 'exact', head: true })
+        .eq('college_id', parseInt(id, 10));
+      return NextResponse.json({ ...mapCollege(data as CollegeRow), applicants: count ?? 0 });
     }
 
     const query = supabase.from('colleges').select('*').order('id', { ascending: true });
@@ -82,7 +126,21 @@ export async function GET(request: NextRequest) {
       list = list.filter((c) => c.status.toLowerCase() === status.toLowerCase());
     }
 
-    return NextResponse.json(list.map(mapCollege));
+    // Fetch applicant counts for all colleges in one query
+    const { data: appCounts } = await supabase
+      .from('applications')
+      .select('college_id');
+
+    const countMap: Record<number, number> = {};
+    for (const row of appCounts ?? []) {
+      const cid = (row as { college_id: number }).college_id;
+      countMap[cid] = (countMap[cid] ?? 0) + 1;
+    }
+
+    return NextResponse.json(list.map((row) => ({
+      ...mapCollege(row),
+      applicants: countMap[row.id] ?? 0,
+    })));
   } catch (e) {
     console.error('colleges GET:', e);
     return NextResponse.json(
@@ -118,6 +176,7 @@ export async function POST(request: NextRequest) {
         ? body.requirements.split(',').map((item: string) => item.trim()).filter(Boolean)
         : [];
 
+    // Insert first (need the ID for the storage path)
     const { data: inserted, error } = await supabase
       .from('colleges')
       .insert({
@@ -131,6 +190,7 @@ export async function POST(request: NextRequest) {
         application_deadline: body.applicationDeadline || null,
         requirements: normalizedRequirements,
         contact_email: body.contactEmail || null,
+        logo_url: null,
       })
       .select('*')
       .single();
@@ -143,7 +203,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create college' }, { status: 500 });
     }
 
-    return NextResponse.json(mapCollege(inserted as CollegeRow), { status: 201 });
+    const row = inserted as CollegeRow;
+
+    // Upload logo now that we have the college ID
+    const logoUrl = await uploadLogo(supabase, row.id, body.logoBase64 ?? null);
+    if (logoUrl) {
+      await supabase.from('colleges').update({ logo_url: logoUrl }).eq('id', row.id);
+      row.logo_url = logoUrl;
+    }
+
+    return NextResponse.json(mapCollege(row), { status: 201 });
   } catch (e) {
     console.error('colleges POST:', e);
     return NextResponse.json(
@@ -201,6 +270,13 @@ export async function PUT(request: NextRequest) {
         ? body.requirements.split(',').map((item: string) => item.trim()).filter(Boolean)
         : prev.requirements ?? [];
 
+    // Upload new logo if a new base64 image was provided
+    let logoUrl = prev.logo_url;
+    if (body.logoBase64 && body.logoBase64.startsWith('data:')) {
+      const uploaded = await uploadLogo(supabase, parseInt(id, 10), body.logoBase64);
+      if (uploaded) logoUrl = uploaded;
+    }
+
     const patch = {
       name: body.name ?? prev.name,
       location: body.location ?? prev.location,
@@ -212,6 +288,7 @@ export async function PUT(request: NextRequest) {
       application_deadline: body.applicationDeadline ?? prev.application_deadline,
       requirements: normalizedRequirements,
       contact_email: body.contactEmail ?? prev.contact_email,
+      logo_url: logoUrl,
       updated_at: new Date().toISOString(),
     };
 

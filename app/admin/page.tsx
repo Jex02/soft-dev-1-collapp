@@ -93,7 +93,7 @@ export default function AdminPage() {
           title: 'Add Colleges',
           value: String(data.counts.colleges),
           icon: Building2,
-          href: '/admin/manageuser',
+          href: '/admin/colleges',
           className: 'bg-white text-slate-950',
         },
         {
