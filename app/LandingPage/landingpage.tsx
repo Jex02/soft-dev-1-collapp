@@ -201,11 +201,10 @@ export default function LandingPage() {
         <div className="hero__content">
           <p className="hero__eyebrow">COLLAPP</p>
           <h1 className="hero__heading">
-            Streamline your college journey from application to acceptance.
+          Every great journey starts with a single step.
           </h1>
           <p className="hero__subtext">
-            Build a polished application workflow for students and school representatives, from
-            program search to submission review.
+            Sign up to beign tracking your applications, deadlines, and tasks all in one place. Stay organized and never miss a step on your path to college acceptance.
           </p>
 
           <div className="hero__actions">
