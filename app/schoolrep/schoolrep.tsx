@@ -16,7 +16,7 @@ interface Applicant {
   status: 'Pending' | 'Under Review' | 'Accepted' | 'Rejected';
   appliedDate: string;
   updatedAt: string;
-  documents?: { name: string; url?: string | null }[];
+  documents?: { name: string; url?: string | null; path?: string }[];
   notes?: string;
   initials: string;
 }
@@ -73,6 +73,9 @@ export default function SchoolRepPage() {
   const [repCollegeId, setRepCollegeId] = useState<number | null>(null);
   const [reviewComment, setReviewComment] = useState('');
   const [selectedDocumentUrl, setSelectedDocumentUrl] = useState<string | null>(null);
+  // Map of doc index → resolved preview URL (fetched from signed-url endpoint)
+  const [previewUrls, setPreviewUrls] = useState<Record<number, string | null>>({});
+  const [previewLoading, setPreviewLoading] = useState<Record<number, boolean>>({});
 
   const pendingCount = applicants.filter((applicant) => applicant.status === 'Pending' || applicant.status === 'Under Review').length;
   const pendingApplicants = applicants.filter((applicant) => applicant.status === 'Pending' || applicant.status === 'Under Review');
@@ -100,6 +103,8 @@ export default function SchoolRepPage() {
     if (!selectedApplicant) {
       setReviewComment('');
       setSelectedDocumentUrl(null);
+      setPreviewUrls({});
+      setPreviewLoading({});
       return;
     }
 
@@ -107,6 +112,24 @@ export default function SchoolRepPage() {
     const firstDocumentWithUrl = selectedApplicant.documents?.find((document) => Boolean(document.url));
     setSelectedDocumentUrl(firstDocumentWithUrl?.url ?? null);
   }, [selectedApplicant]);
+
+  // Fetch a fresh signed URL from the server for a specific document index
+  const fetchSignedUrl = async (docIndex: number, path: string) => {
+    setPreviewLoading((prev) => ({ ...prev, [docIndex]: true }));
+    try {
+      const res = await fetch(`/server/applications/signed-url?path=${encodeURIComponent(path)}`);
+      if (res.ok) {
+        const json = await res.json() as { signedUrl?: string };
+        setPreviewUrls((prev) => ({ ...prev, [docIndex]: json.signedUrl ?? null }));
+      } else {
+        setPreviewUrls((prev) => ({ ...prev, [docIndex]: null }));
+      }
+    } catch {
+      setPreviewUrls((prev) => ({ ...prev, [docIndex]: null }));
+    } finally {
+      setPreviewLoading((prev) => ({ ...prev, [docIndex]: false }));
+    }
+  };
 
   const updateStatus = async (id: number, status: 'Accepted' | 'Pending' | 'Rejected' | 'Under Review') => {
     try {
@@ -871,11 +894,11 @@ export default function SchoolRepPage() {
 
       {selectedApplicant && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto"
           onClick={() => setSelectedApplicantId(null)}
         >
           <div
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl my-auto"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -909,48 +932,113 @@ export default function SchoolRepPage() {
             </div>
 
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-600">Submitted documents</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">Submitted documents</p>
+                {selectedApplicant.documents && selectedApplicant.documents.length > 0 && (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                    {selectedApplicant.documents.length} file{selectedApplicant.documents.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
               {selectedApplicant.documents && selectedApplicant.documents.length > 0 ? (
-                <ul className="mt-2 list-disc pl-5 text-sm text-slate-800 space-y-1">
-                  {selectedApplicant.documents.map((documentName, index) => (
-                    <li key={`${selectedApplicant.id}-${documentName.name}-${index}`}>
-                      {documentName.url ? (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDocumentUrl(documentName.url ?? null)}
-                          className="underline text-black"
-                        >
-                          {documentName.name}
-                        </button>
-                      ) : (
-                        documentName.name
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-3 space-y-2">
+                  {selectedApplicant.documents.map((doc, index) => {
+                    const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(doc.name);
+                    const isPdf = /\.pdf$/i.test(doc.name);
+                    const isActive = selectedDocumentUrl === `doc-${index}`;
+                    const resolvedUrl = previewUrls[index];
+                    const isLoadingPreview = previewLoading[index];
+
+                    const handlePreviewClick = async () => {
+                      if (isActive) {
+                        // Hide
+                        setSelectedDocumentUrl(null);
+                        return;
+                      }
+                      setSelectedDocumentUrl(`doc-${index}`);
+                      // Fetch a fresh signed URL if we don't have one yet, or if the last attempt failed (null)
+                      const needsFetch = resolvedUrl === undefined || resolvedUrl === null;
+                      if (needsFetch && (doc.path || doc.url)) {
+                        if (doc.path) {
+                          await fetchSignedUrl(index, doc.path);
+                        } else if (doc.url) {
+                          setPreviewUrls((prev) => ({ ...prev, [index]: doc.url ?? null }));
+                        }
+                      }
+                    };
+
+                    return (
+                      <div key={`${selectedApplicant.id}-${doc.name}-${index}`}>
+                        <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="shrink-0 text-base">
+                              {isImage ? '🖼️' : isPdf ? '📄' : '📎'}
+                            </span>
+                            <span className="truncate text-sm text-slate-800">{doc.name}</span>
+                          </div>
+                          {(doc.url || doc.path) ? (
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={handlePreviewClick}
+                                disabled={isLoadingPreview}
+                                className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-700 transition disabled:opacity-50"
+                              >
+                                {isLoadingPreview ? 'Loading…' : isActive ? 'Hide' : 'Preview'}
+                              </button>
+                              {resolvedUrl && (
+                                <a
+                                  href={resolvedUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                                >
+                                  Open ↗
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-500">
+                              No link
+                            </span>
+                          )}
+                        </div>
+                        {isActive && (
+                          <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                            {isLoadingPreview ? (
+                              <div className="flex h-20 items-center justify-center text-sm text-slate-400">
+                                Loading preview…
+                              </div>
+                            ) : resolvedUrl ? (
+                              isImage ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={resolvedUrl}
+                                  alt={doc.name}
+                                  className="max-h-64 w-full object-contain"
+                                />
+                              ) : (
+                                <iframe
+                                  title={`Preview of ${doc.name}`}
+                                  src={resolvedUrl}
+                                  className="h-80 w-full"
+                                />
+                              )
+                            ) : (
+                              <div className="flex h-20 items-center justify-center text-sm text-rose-400">
+                                Could not load preview. The file may have been deleted.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                <p className="mt-1 text-sm text-slate-500">No documents uploaded.</p>
+                <p className="mt-2 text-sm text-slate-500">No documents uploaded.</p>
               )}
             </div>
-
-            {selectedDocumentUrl && (
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm text-slate-600">Document preview</p>
-                <a
-                  href={selectedDocumentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-block text-xs text-blue-600 underline"
-                >
-                  Open in new tab ↗
-                </a>
-                <iframe
-                  title="Applicant document preview"
-                  src={selectedDocumentUrl}
-                  className="mt-3 h-72 w-full rounded-xl border border-slate-300 bg-white"
-                />
-              </div>
-            )}
 
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <label className="text-sm text-slate-600" htmlFor="review-comment">Application comment</label>

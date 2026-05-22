@@ -215,7 +215,7 @@ export default function StudentColleges() {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? 'unknown';
 
-      const uploadedDocuments: { name: string; url: string | null }[] = [];
+      const uploadedDocuments: { name: string; url: string | null; path?: string }[] = [];
       for (const file of selectedFiles) {
         const filePath = `applications/${userId}/${college.id}/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage
@@ -223,13 +223,20 @@ export default function StudentColleges() {
           .upload(filePath, file, { upsert: true });
 
         if (uploadError) {
-          // If storage isn't set up, fall back to name-only
-          uploadedDocuments.push({ name: file.name, url: null });
+          // Upload failed — store the file path as a fallback so the server can generate a signed URL later
+          console.error('Document upload error:', uploadError.message);
+          uploadedDocuments.push({ name: file.name, url: null, path: filePath });
         } else {
-          const { data: urlData } = supabase.storage
+          // Use a signed URL (works for both public and private buckets). 1-hour expiry.
+          const { data: signedData, error: signedError } = await supabase.storage
             .from('documents')
-            .getPublicUrl(filePath);
-          uploadedDocuments.push({ name: file.name, url: urlData?.publicUrl ?? null });
+            .createSignedUrl(filePath, 3600);
+          uploadedDocuments.push({
+            name: file.name,
+            // Store the storage path so the school rep can request a fresh signed URL later
+            url: signedError ? null : (signedData?.signedUrl ?? null),
+            path: filePath,
+          });
         }
       }
 

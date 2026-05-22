@@ -27,11 +27,12 @@ function normalizeDocuments(input: unknown) {
         // Try to parse stringified JSON objects like '{"name":"file.jpg","url":null}'
         if (item.trim().startsWith('{')) {
           try {
-            const parsed = JSON.parse(item) as { name?: unknown; url?: unknown };
+            const parsed = JSON.parse(item) as { name?: unknown; url?: unknown; path?: unknown };
             const name = typeof parsed.name === 'string' ? parsed.name : '';
             if (!name) return null;
             const url = typeof parsed.url === 'string' ? parsed.url : null;
-            return { name, url };
+            const path = typeof parsed.path === 'string' ? parsed.path : undefined;
+            return { name, url, path };
           } catch {
             // fall through to treat as plain filename
           }
@@ -40,16 +41,17 @@ function normalizeDocuments(input: unknown) {
       }
 
       if (item && typeof item === 'object') {
-        const candidate = item as { name?: unknown; url?: unknown };
+        const candidate = item as { name?: unknown; url?: unknown; path?: unknown };
         const name = typeof candidate.name === 'string' ? candidate.name : '';
         if (!name) return null;
         const url = typeof candidate.url === 'string' ? candidate.url : null;
-        return { name, url };
+        const path = typeof candidate.path === 'string' ? candidate.path : undefined;
+        return { name, url, path };
       }
 
       return null;
     })
-    .filter((value): value is { name: string; url: string | null } => value !== null);
+    .filter((value): value is { name: string; url: string | null; path?: string } => value !== null);
 }
 
 function mapApplication(row: ApplicationRow) {
